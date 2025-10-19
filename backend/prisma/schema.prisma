@@ -1,0 +1,293 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int     @id @default(autoincrement())
+  email         String  @unique
+  passwordHash  String
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  tokenHash String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@map("refresh_tokens")
+}
+
+// Organization and User Management
+model OrganizationSettings {
+  id                          String   @id @default(cuid())
+  orgId                       String   @unique
+
+  // LLM Filtering
+  shouldLLMFilter             Boolean  @default(false)
+  filterPrompt                String?
+  includeItems                String[]
+  excludeItems                String[]
+
+  // Google Drive custom keys
+  googleDriveCustomKeyEnabled Boolean  @default(false)
+  googleDriveClientId         String?
+  googleDriveClientSecret     String?
+
+  // Notion custom keys
+  notionCustomKeyEnabled      Boolean  @default(false)
+  notionClientId              String?
+  notionClientSecret          String?
+
+  // OneDrive custom keys
+  onedriveCustomKeyEnabled    Boolean  @default(false)
+  onedriveClientId            String?
+  onedriveClientSecret        String?
+
+  updatedAt                   DateTime @updatedAt
+
+  @@map("organization_settings")
+}
+
+// Connection Management
+model Connection {
+  id            String   @id @default(cuid())
+  provider      String   // "notion", "google-drive", "onedrive"
+  orgId         String
+  userId        String
+  email         String?
+
+  // Limits and tags
+  documentLimit Int      @default(10000)
+  containerTags String[]
+
+  // Token management
+  accessToken   String?
+  refreshToken  String?
+  expiresAt     DateTime?
+
+  // Provider-specific metadata
+  metadata      Json     @default("{}")
+
+  createdAt     DateTime @default(now())
+
+  @@map("connections")
+}
+
+// Space Management (Projects/Workspaces)
+model Space {
+  id                  String   @id @default(cuid())
+  name                String?
+  description         String?
+  orgId               String
+  ownerId             String
+  containerTag        String?
+
+  // Visibility and features
+  visibility          String   @default("private") // "public", "private", "unlisted"
+  isExperimental      Boolean  @default(false)
+
+  // Content indexing
+  contentTextIndex    Json     @default("{}")
+  indexSize           Int?
+
+  metadata            Json?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  members             SpacesToMembers[]
+  documentsToSpaces   DocumentsToSpaces[]
+  memoryEntries       MemoryEntry[]
+
+  @@map("spaces")
+}
+
+// Space Membership
+model SpacesToMembers {
+  spaceId   String
+  userId    String
+  role      String   @default("viewer") // "owner", "admin", "editor", "viewer"
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@id([spaceId, userId])
+  @@map("spaces_to_members")
+}
+
+// Document Management
+model Document {
+  id                    String   @id @default(cuid())
+  customId              String?
+
+  // Organization and ownership
+  orgId                 String
+  userId                String
+  connectionId          String?
+
+  // Content fields
+  title                 String?
+  content               String?
+  summary               String?
+  url                   String?
+  source                String?
+  type                  String   @default("text")
+  status                String   @default("unknown")
+
+  // Metadata and processing
+  metadata              Json?
+  processingMetadata    Json?
+  raw                   Bytes?
+  ogImage               String?
+
+  // Content statistics
+  tokenCount            Int?
+  wordCount             Int?
+  chunkCount            Int      @default(0)
+  averageChunkSize      Decimal?
+
+  // Embeddings (legacy and new)
+  summaryEmbedding      String?  // JSON array stored as string
+  summaryEmbeddingModel String?
+  summaryEmbeddingNew   String?  // JSON array stored as string
+  summaryEmbeddingModelNew String?
+
+  // Timestamps
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  chunks                Chunk[]
+  documentsToSpaces     DocumentsToSpaces[]
+  memorySources         MemoryDocumentSource[]
+
+  @@map("documents")
+}
+
+// Document Chunks
+model Chunk {
+  id                  String   @id @default(cuid())
+  documentId          String
+
+  // Content
+  content             String
+  embeddedContent     String?
+  type                String   @default("text")
+  position            Int
+
+  // Metadata
+  metadata            Json?
+
+  // Embeddings (legacy and new)
+  embedding           String?  // JSON array stored as string
+  embeddingModel      String?
+  embeddingNew        String?  // JSON array stored as string
+  embeddingNewModel   String?
+  matryokshaEmbedding String?  // JSON array stored as string
+  matryokshaEmbeddingModel String?
+
+  createdAt           DateTime @default(now())
+
+  document            Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("chunks")
+}
+
+// Memory System
+model MemoryEntry {
+  id            String   @id @default(cuid())
+
+  // Core memory content
+  memory        String   // The actual memory content
+
+  // Space and organization
+  spaceId       String
+  orgId         String
+  userId        String?
+
+  // Version control
+  version       Int      @default(1)
+  isLatest      Boolean  @default(true)
+  parentMemoryId String?
+  rootMemoryId  String?
+
+  // Memory relationships
+  memoryRelations Json   @default("{}")
+
+  // Source tracking
+  sourceCount   Int      @default(1)
+
+  // Status flags
+  isInference   Boolean  @default(false)
+  isForgotten   Boolean  @default(false)
+  forgetAfter   DateTime?
+  forgetReason  String?
+
+  // Embeddings
+  memoryEmbedding     String?  // JSON array stored as string
+  memoryEmbeddingModel String?
+  memoryEmbeddingNew  String?  // JSON array stored as string
+  memoryEmbeddingNewModel String?
+
+  metadata      Json?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  space         Space              @relation(fields: [spaceId], references: [id])
+  documentSources MemoryDocumentSource[]
+
+  @@map("memory_entries")
+}
+
+// Document to Space relationships
+model DocumentsToSpaces {
+  documentId String
+  spaceId    String
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  space      Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, spaceId])
+  @@map("documents_to_spaces")
+}
+
+// Memory to Document relationships
+model MemoryDocumentSource {
+  memoryEntryId String
+  documentId    String
+  relevanceScore Int     @default(100)
+  metadata      Json?
+  addedAt       DateTime @default(now())
+
+  memoryEntry   MemoryEntry @relation(fields: [memoryEntryId], references: [id], onDelete: Cascade)
+  document      Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([memoryEntryId, documentId])
+  @@map("memory_document_sources")
+}
