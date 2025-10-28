@@ -227,7 +227,7 @@ export async function uploadDocumentFile({
     sm_internal_fileType: file.mimetype,
   }
 
-  //TODO: we need to give a good ai generated title here
+  // AI-generated title will be set by the worker after content extraction
   const document = await prisma.document.create({
     data: {
       id,
