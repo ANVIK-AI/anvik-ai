@@ -28,6 +28,7 @@ export async function registerWorkers() {
 
     const { documentId } = job.data as ProcessDocumentJob
     try {
+
       await step(documentId, 'extracting', async () => {
         console.log("extracting")
         const { text, type } = await extractText(documentId)
@@ -39,27 +40,58 @@ export async function registerWorkers() {
 
       await step(documentId, 'chunking', async () => {
         console.log("chunking")
+
         const doc = await getDoc(documentId)
-        if (!doc || !doc.content) return
-        const chunks = chunk(doc.content)
-        for (let i = 0; i < chunks.length; i++) {
-          await prisma.chunk.create({
-            data: {
-              id: uuidv4(),
-              documentId,
-              position: i,
-              content: chunks[i] || "",
-              type: 'text',
-            },
-          })
+        if (!doc?.content) {
+          console.warn(`No content found for document at chunking ${documentId}`)
+          return
         }
-        await prisma.document.update({
-          where: { id: documentId },
-          data: {
-            chunkCount: chunks.length,
-            averageChunkSize: chunks.length > 0 ? Math.round(chunks.reduce((a, c) => a + c.length, 0) / chunks.length).toString() : '0',
-          }
-        })
+
+        const chunks = semanticChunk(doc.content, {
+          targetSize: 1200,
+          overlap: 200,
+          maxChunkSize: 1500,
+        });
+
+        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+        const averageChunkSize = chunks.length > 0
+          ? Math.round(totalLength / chunks.length)
+          : 0
+
+        // Prepare batch data
+        const chunkData = chunks.map((content, i) => ({
+          id: uuidv4(),
+          documentId,
+          position: i,
+          content: content || "",
+          type: 'text',
+        }))
+
+        try {
+          await prisma.$transaction(async (tx) => {
+            // Delete existing chunks if reprocessing
+            await tx.chunk.deleteMany({
+              where: { documentId }
+            })
+
+            // Create all chunks
+            await tx.chunk.createMany({
+              data: chunkData,
+            })
+
+            // Update document
+            await tx.document.update({
+              where: { id: documentId },
+              data: {
+                chunkCount: chunks.length,
+                averageChunkSize: averageChunkSize.toString(),
+              }
+            })
+          })
+        } catch (error) {
+          console.error(`Chunking failed for document ${documentId}:`, error)
+          throw error
+        }
       })
 
       await step(documentId, 'embedding', async () => {
@@ -87,7 +119,10 @@ export async function registerWorkers() {
       await step(documentId, 'generate_summary_and_title', async () => {
         console.log("generate_summary_and_title")
         const doc = await getDoc(documentId)
-        if (!doc || !doc.content) return
+        if (!doc?.content) {
+          console.warn(`No content found for document at generate_summary_and_title ${documentId}`)
+          return
+        }
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
         // Generate both title and summary in one AI call for optimization
@@ -302,54 +337,55 @@ export async function registerWorkers() {
       })
 
       //TODO: currently iterate_questions and generate_memories create memories which could get repeated,we need to fix that.
-      // await step(documentId, 'generate_memories', async () => {
-      //   console.log("generate_memories")
-      //   const doc = await getDoc(documentId)
-      //   if (!doc || !doc.content) return
-      //   // Resolve the spaces for this document to set spaceContainerTag later
-      //   const spaceRows = await prisma.documentsToSpaces.findMany({
-      //     where: { documentId },
-      //     include: { space: true }
-      //   })
-      //   const spaceId = spaceRows[0]?.spaceId
+      await step(documentId, 'generate_memories', async () => {
+        console.log("generate_memories")
+        const doc = await getDoc(documentId)
+        if (!doc || !doc.content) return
+        // Resolve the spaces for this document to set spaceContainerTag later
+        const spaceRows = await prisma.documentsToSpaces.findMany({
+          where: { documentId },
+          include: { space: true }
+        })
+        const spaceId = spaceRows[0]?.spaceId
 
-      //   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-      //   const prompt = `Extract concise, user-relevant facts ("memories") from the following document.\nReturn JSON array of objects with keys: memory (string), isInference (boolean).\nDo not include any extra text.\n\n---\n${doc.content}`
-      //   const { response } = await model.generateContent(prompt)
-      //   const text = response.text()
-      //   let items: Array<{ memory: string; isInference?: boolean }>
-      //   try { items = JSON.parse(text) } catch { items = [] }
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+        const prompt = `Extract concise, user-relevant facts ("memories") from the following document.\nReturn JSON array of objects with keys: memory (string), isInference (boolean).\nDo not include any extra text.\n\n---\n${doc.content}`
+        const { response } = await model.generateContent(prompt)
+        const text = response.text()
+        let items: Array<{ memory: string; isInference?: boolean }>
+        try { items = JSON.parse(text) } catch { items = [] }
 
-      //   const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
-      //   for (const it of items) {
-      //     if (!it.memory) continue
-      //     const emb = await embedder.embedContent(it.memory)
-      //     const memoryId = uuidv4()
-      //     await prisma.memoryEntry.create({
-      //       data: {
-      //         id: memoryId,
-      //         memory: it.memory,
-      //         spaceId: spaceId!,
-      //         orgId: doc.orgId,
-      //         userId: doc.userId,
-      //         version: 1,
-      //         isLatest: true,
-      //         isInference: it.isInference === true,
-      //         memoryEmbedding: JSON.stringify(emb.embedding.values),
-      //         memoryEmbeddingModel: embeddingModelName(),
-      //       },
-      //     })
+        const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
+        for (const it of items) {
+          if (!it.memory) continue
+          const emb = await embedder.embedContent(it.memory)
+          const memoryId = uuidv4()
+          await prisma.memoryEntry.create({
+            data: {
+              id: memoryId,
+              memory: it.memory,
+              spaceId: spaceId!,
+              orgId: doc.orgId,
+              userId: doc.userId,
+              version: 1,
+              isLatest: true,
+              isInference: it.isInference === true,
+              memoryEmbedding: JSON.stringify(emb.embedding.values),
+              memoryEmbeddingModel: embeddingModelName(),
+            },
+          })
 
-      //     // Link memory to document (source)
-      //     await prisma.memoryDocumentSource.create({
-      //       data: {
-      //         memoryEntryId: memoryId,
-      //         documentId,
-      //         relevanceScore: 100,
-      //       },
-      //     })
-      //   }
-      // })
+          // Link memory to document (source)
+          await prisma.memoryDocumentSource.create({
+            data: {
+              memoryEntryId: memoryId,
+              documentId,
+              relevanceScore: 100,
+            },
+          })
+        }
+      })
+
 
       await finalize(documentId, 'done')
     } catch (err) {
@@ -464,3 +500,143 @@ async function finalize(documentId: string, finalStatus: 'done' | 'failed', err?
   })
 }
 
+function recursiveSplitter(
+  content: string,
+  target: number
+): string[] {
+  const separators = [
+    /(?<=\n\n+)/g,
+    /(?<=[.!?]+\s+)/g,
+    /(?<=[,;:]+\s+)/g,
+    /(?<=\s+)/g,
+  ];
+
+  if (content.length <= target) {
+    return content.trim() ? [content.trim()] : [];
+  }
+
+  let splitIndex = -1;
+  let bestSeparator = '';
+
+  for (const separator of separators) {
+    const matches = [...content.matchAll(separator)];
+    for (const match of matches) {
+      const index = match.index! + match[0].length;
+      if (index > target * 0.7 && index < target * 1.3) {
+        splitIndex = index;
+        bestSeparator = match[0];
+        break;
+      }
+    }
+    if (splitIndex !== -1) break;
+  }
+
+  if (splitIndex === -1) {
+    splitIndex = target;
+    const spaceIndex = content.lastIndexOf(' ', target);
+    if (spaceIndex > target * 0.5) {
+      splitIndex = spaceIndex + 1;
+    }
+  }
+
+  const firstPart = content.slice(0, splitIndex).trim();
+  const remaining = content.slice(splitIndex).trim();
+
+  if (!firstPart) return recursiveSplitter(remaining, target);
+  if (!remaining) return [firstPart];
+
+  return [
+    firstPart,
+    ...recursiveSplitter(remaining, target)
+  ];
+}
+
+
+interface ChunkingOptions {
+  targetSize?: number;
+  overlap?: number;
+  maxChunkSize?: number;
+  minChunkSize?: number;
+}
+
+function semanticChunk(
+  content: string,
+  options: ChunkingOptions = {}
+): string[] {
+  const {
+    targetSize = 1200,
+    overlap = 200,
+    maxChunkSize = 1500,
+    minChunkSize = 100
+  } = options;
+
+  const chunks: string[] = [];
+  const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+  let currentChunk: string = '';
+  let currentSize: number = 0;
+
+  for (const paragraph of paragraphs) {
+    const paragraphSize = paragraph.length;
+    const trimmedParagraph = paragraph.trim();
+
+    if (paragraphSize > maxChunkSize) {
+      if (currentChunk && currentChunk.trim().length >= minChunkSize) {
+        chunks.push(currentChunk.trim());
+      }
+
+      const paragraphChunks = recursiveSplitter(trimmedParagraph, targetSize);
+
+      if (paragraphChunks.length > 0) {
+        chunks.push(...paragraphChunks.slice(0, -1));
+        currentChunk = paragraphChunks[paragraphChunks.length - 1] || '';
+        currentSize = currentChunk.length;
+      } else {
+        currentChunk = '';
+        currentSize = 0;
+      }
+      continue;
+    }
+
+    const newSize = currentSize + (currentSize > 0 ? 2 : 0) + paragraphSize;
+
+    if (currentSize > 0 && newSize > maxChunkSize) {
+      if (currentChunk.trim().length >= minChunkSize) {
+        chunks.push(currentChunk.trim());
+
+        const words = currentChunk.trim().split(/\s+/);
+        let overlapText = '';
+        let overlapSize = 0;
+
+        for (let i = words.length - 1; i >= 0; i--) {
+          const potentialText = words.slice(i).join(' ');
+          if (potentialText.length <= overlap) {
+            overlapText = potentialText;
+            overlapSize = potentialText.length;
+            break;
+          }
+        }
+
+        currentChunk = overlapText || '';
+        currentSize = overlapSize;
+      } else {
+        currentChunk = '';
+        currentSize = 0;
+      }
+    }
+
+    if (currentSize > 0) {
+      currentChunk += '\n\n' + trimmedParagraph;
+      currentSize += trimmedParagraph.length + 2;
+    } else {
+      currentChunk = trimmedParagraph;
+      currentSize = trimmedParagraph.length;
+    }
+  }
+
+  if (currentChunk.trim().length >= minChunkSize) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks.filter(chunk => chunk.length >= minChunkSize);
+}
