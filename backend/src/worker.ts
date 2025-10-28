@@ -109,6 +109,7 @@ export async function registerWorkers() {
         })
       })
 
+      //TODO:need to give better prompt for getting good questions
       await step(documentId, 'generate_questions', async () => {
         console.log("generate_questions")
         const doc = await getDoc(documentId)
@@ -125,7 +126,6 @@ export async function registerWorkers() {
         })
       })
 
-      // Optional but recommended: iterate through the generated questions to extract more targeted memories
       await step(documentId, 'iterate_questions', async () => {
         console.log("iterate_questions")
         const doc = await getDoc(documentId)
@@ -148,17 +148,20 @@ export async function registerWorkers() {
         const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
 
         for (const q of questions) {
-          // Ask the model to answer concisely using only the document's content
+          //TODO:need to give better prompt for getting good formatted answers
           const qPrompt = `Answer the question concisely using only the following document. If unknown, say "Unknown".\nQuestion: ${q}\n---\n${doc.content || ''}`
           const { response } = await answerModel.generateContent(qPrompt)
           const answer = response.text().trim()
           if (!answer || /^unknown$/i.test(answer)) continue
 
           // Create a memory that derives from this Q&A
-          const memoryText = `${q}: ${answer}`
+          const memoryText = `${answer}`
+          //here wee can add question:answer block or just the answer
+          // const memoryText = `${q}: ${answer}`
           const emb = await embedder.embedContent(memoryText)
           const memoryId = uuidv4()
 
+          //TODO: here we added derivesFrom commonquestion,this needs to be changed for better ones
           await prisma.memoryEntry.create({
             data: {
               id: memoryId,
@@ -185,6 +188,7 @@ export async function registerWorkers() {
         }
       })
 
+      //TODO: currently iterate_questions and generate_memories create memories which could get repeated,we need to fix that.
       await step(documentId, 'generate_memories', async () => {
         console.log("generate_memories")
         const doc = await getDoc(documentId)

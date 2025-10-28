@@ -227,6 +227,7 @@ export async function uploadDocumentFile({
     sm_internal_fileType: file.mimetype,
   }
 
+  //TODO: we need to give a good ai generated title here
   const document = await prisma.document.create({
     data: {
       id,
@@ -251,6 +252,7 @@ export async function uploadDocumentFile({
   }
 
   // Store raw file bytes (optional). For large files prefer object storage.
+  //TODO: update storing of files to cloudinary
   const raw = fs.readFileSync(file.path)
   await prisma.document.update({
     where: { id },
@@ -270,8 +272,6 @@ export async function uploadDocumentFile({
     documentId: id,
     containerTags,
     mimetype: file.mimetype
-  }).then(() => {
-    console.log("dnn")
   }).catch((e) => {
     console.log(e)
   })
