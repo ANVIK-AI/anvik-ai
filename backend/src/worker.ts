@@ -5,9 +5,12 @@ import { embeddingModelName } from './gemini'
 import { v4 as uuidv4 } from 'uuid'
 import { PDFParse } from 'pdf-parse'
 import path from 'path'
+import { TaskType } from '@google/generative-ai';
+
 
 
 import { createRequire } from 'module';
+import { title } from 'process'
 const require = createRequire(import.meta.url);
 
 // If you need DOCX/CSV/MD parsing, import libraries (mammoth, papaparse, etc.)
@@ -95,26 +98,69 @@ export async function registerWorkers() {
       })
 
       await step(documentId, 'embedding', async () => {
-        console.log("embedding")
+        console.log("embedding");
+
         const model = genAI.getGenerativeModel({
           model: embeddingModelName(),
-        })
+        });
+
         const chunks = await prisma.chunk.findMany({
           where: { documentId },
           orderBy: { position: 'asc' }
-        })
-        for (const chunk of chunks) {
-          const result = await model.embedContent(chunk.content)
-          const vector = result.embedding.values
-          await prisma.chunk.update({
-            where: { id: chunk.id },
-            data: {
-              embedding: JSON.stringify(vector),
-              embeddingModel: embeddingModelName(),
-            }
-          })
+        });
+
+        if (chunks.length === 0) {
+          console.log("No chunks to embed for document:", documentId);
+          return;
         }
-      })
+
+        try {
+          // 1. Create a batch request for the Gemini API
+          const requests = chunks.map(chunk => ({
+            content: {
+              role: 'user',
+              parts: [{ text: chunk.content }]
+            },
+            taskType: "RETRIEVAL_DOCUMENT" as TaskType
+          }));
+
+          // The requests array needs to be passed as the value of a 'requests' property
+          const result = await model.batchEmbedContents({ requests });
+
+          const embeddings = result.embeddings;
+
+          if (!embeddings || embeddings.length !== chunks.length) {
+            throw new Error("Mismatch between chunk count and embedding count");
+          }
+
+          // 3. Prepare all database updates
+          const updatePromises = chunks.map((chunk, i) => {
+            const vector = embeddings[i]?.values;
+
+            if (!vector) {
+              console.warn(`No embedding returned for chunk ${chunk.id} (position ${chunk.position})`);
+              return Promise.resolve(); // Skip this chunk
+            }
+
+            return prisma.chunk.update({
+              where: { id: chunk.id },
+              data: {
+                embedding: JSON.stringify(vector),
+                embeddingModel: embeddingModelName(),
+              }
+            });
+          });
+
+          // 4. Run all database updates in parallel
+          await Promise.all(updatePromises);
+
+          console.log(`Successfully embedded ${chunks.length} chunks for document ${documentId}`);
+
+        } catch (error) {
+          console.error(`Embedding failed for document ${documentId}:`, error);
+          throw error; // Re-throw to fail the 'step'
+        }
+      });
 
       await step(documentId, 'generate_summary_and_title', async () => {
         console.log("generate_summary_and_title")
