@@ -162,277 +162,223 @@ export async function registerWorkers() {
         }
       });
 
-      await step(documentId, 'generate_summary_and_title', async () => {
-        console.log("generate_summary_and_title")
+      await step(documentId, 'extract_document_essentials', async () => {
+        console.log(`[${new Date().toISOString()}] Starting extract_document_essentials for document ${documentId}`)
+
         const doc = await getDoc(documentId)
         if (!doc?.content) {
-          console.warn(`No content found for document at generate_summary_and_title ${documentId}`)
+          console.warn(`No content found for document ${documentId}`)
           return
         }
+
+        // Get space info for memory linking
+        const spaceRows = await prisma.documentsToSpaces.findMany({
+          where: { documentId },
+          include: { space: true }
+        })
+        const spaceId = spaceRows[0]?.spaceId
+        if (!spaceId) {
+          console.warn(`No space found for document ${documentId}`)
+          return
+        }
+
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+        const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
 
-        // Generate both title and summary in one AI call for optimization
-        const contentPreview = doc.content.substring(0, Math.min(doc.content.length, 3000))
-        const prompt = `Analyze the document and provide both a descriptive title and summary in JSON format.
-          Requirements:
-          - Title: 3-8 words, descriptive, no generic terms like "document" or "file"
-          - Summary: 2-4 sentences focusing on key facts, entities, and main topics
-          - Consider document type (research paper, report, article, etc.) for appropriate tone
-          - Handle edge cases: very short documents, technical content, mixed languages
+        const prompt = `
+          You are analyzing a document to extract essential information for a personal AI assistant memory system.
 
-          Return **only valid JSON**, with no markdown, explanation, or code block formatting.
-          example format:
+          **TASK:** Extract the following components in a SINGLE JSON response:
+
+          1. **Title**: A descriptive, professional title (5-10 words) that captures the document's essence
+          2. **Summary**: A concise 2-4 sentence summary focusing on key facts, experiences, and achievements
+          3. **Memories**: 15-25 concise, atomic factual statements that represent key information worth remembering
+
+          **CRITICAL GUIDELINES FOR MEMORIES:**
+
+          **Format Requirements:**
+          - Each memory must be a complete, standalone factual statement
+          - Use consistent naming format: "[Full Name] [factual statement]"
+          - Keep each memory to 1-2 short sentences maximum
+          - Focus on atomic facts that can be independently retrieved
+
+          **Content Requirements:**
+          - Extract ALL key personal information: contact details, education, work experience, projects, skills, achievements, certifications
+          - Include specific details: dates, technologies used, company names, project names, achievements
+          - Maintain third-person perspective consistently
+          - Prioritize factual, verifiable information over opinions
+          - Include both explicit facts and strongly implied information
+
+          **Memory Examples (Correct Format):**
+          ✅ "Yash Sanjyot Ainapure email is ainapureyash2@gmail.com"
+          ✅ "Yash Sanjyot Ainapure studies B.Tech Computer Science at D.Y.Patil College of Engineering and Technology with GPA 7.4"
+          ✅ "Yash Sanjyot Ainapure interned as Frontend Developer at SIBIC Incubation Center"
+          ✅ "Yash Sanjyot Ainapure built IMS software frontend using React, Redux, Spring Boot, MySQL at SIBIC Incubation Center"
+          ✅ "Yash Sanjyot Ainapure won 1st rank in Pratham Code hackathon in June 2024"
+
+          **Avoid These:**
+          ❌ Incomplete facts: "Email: ainapureyash2@gmail.com" 
+          ❌ First person: "I studied at D.Y.Patil College"
+          ❌ Generic statements: "He is good at programming"
+          ❌ Long narratives: "During his internship he worked on multiple projects including..."
+
+          **EDGE CASES:**
+          - For resumes: Extract all sections (education, experience, projects, skills, achievements)
+          - For very short documents: Adjust memory count accordingly
+          - Handle missing information gracefully - don't fabricate facts
+          - For technical documents: Focus on key findings and applications
+          - Maintain consistent name formatting throughout all memories
+
+          **RETURN FORMAT:**
+          Return ONLY valid JSON with this exact structure:
           {
-            "title": "Your descriptive title here",
-            "summary": "Your 2-4 sentence summary here"
+            "title": "Descriptive professional title here",
+            "summary": "2-4 sentence comprehensive summary here",
+            "memories": [
+              "Complete factual statement 1",
+              "Complete factual statement 2",
+              "Complete factual statement 3"
+            ]
           }
 
-          Example for a research paper:
-          {
-            "title": "Machine Learning in Healthcare Applications",
-            "summary": "This paper explores machine learning applications in healthcare, focusing on diagnostic algorithms and patient outcome prediction. Key findings demonstrate 95% accuracy in early disease detection using neural networks. The study covers implementation challenges and ethical considerations in medical AI systems."
-          }
-
-          Document content:
+          **DOCUMENT CONTENT:**
           ---
-          ${contentPreview}`
+          ${doc.content.substring(0, Math.min(doc.content.length, 15000))}
+          ---
 
-        const { response } = await model.generateContent(prompt)
-        const text = response.text().trim()
+          Remember: Return ONLY valid JSON, no markdown, no explanations. Focus on extracting ALL important factual information.
+          `
 
         try {
-          const parsed = JSON.parse(text)
-          const title = parsed.title?.trim()
-          const summary = parsed.summary?.trim()
+          console.log(`[${new Date().toISOString()}] Generating document essentials`)
+          const { response } = await model.generateContent(prompt)
+          const text = response.text().trim()
 
-          if (title) {
-            await prisma.document.update({
-              where: { id: documentId },
-              data: { title }
-            })
+          let parsed;
+          try {
+            parsed = JSON.parse(text)
+          } catch (parseError) {
+            console.error('Failed to parse AI response as JSON, attempting cleanup:', text)
+            // Try to extract JSON from malformed response
+            const jsonMatch = text.match(/\{[\s\S]*\}/)
+            if (jsonMatch) {
+              try {
+                parsed = JSON.parse(jsonMatch[0])
+              } catch (secondError) {
+                await generateFallbackContent(documentId, doc, spaceId, model, embedder)
+                return
+              }
+            } else {
+              await generateFallbackContent(documentId, doc, spaceId, model, embedder)
+              return
+            }
           }
 
-          if (summary) {
-            await prisma.document.update({
-              where: { id: documentId },
-              data: { summary }
-            })
+          // Validate required fields
+          if (!parsed.title || !parsed.summary || !parsed.memories || !Array.isArray(parsed.memories)) {
+            console.error('Missing required fields in parsed response:', parsed)
+            await generateFallbackContent(documentId, doc, spaceId, model, embedder)
+            return
+          }
 
-            // Embed the summary
-            const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
-            const emb = await embedder.embedContent(summary)
+          console.log(`[${new Date().toISOString()}] Successfully parsed analysis:`, {
+            title: parsed.title,
+            summaryLength: parsed.summary?.length,
+            memoriesCount: parsed.memories?.length
+          })
+
+          // Update document with title and summary
+          await prisma.document.update({
+            where: { id: documentId },
+            data: {
+              title: parsed.title.trim(),
+              summary: parsed.summary.trim()
+            }
+          })
+
+          // Embed and store summary
+          try {
+            const summaryEmbedding = await embedder.embedContent(parsed.summary)
             await prisma.document.update({
               where: { id: documentId },
               data: {
-                summaryEmbedding: JSON.stringify(emb.embedding.values),
+                summaryEmbedding: JSON.stringify(summaryEmbedding.embedding.values),
                 summaryEmbeddingModel: embeddingModelName(),
               }
             })
+          } catch (embedError) {
+            console.error('Failed to embed summary:', embedError)
           }
-        } catch (parseError) {
-          console.error('Failed to parse AI response as JSON:', text, parseError)
-          // Fallback to original summary generation if JSON parsing fails
-          const fallbackPrompt = `Summarize the following text in 2-4 sentences focusing on key facts and entities.\n\n---\n${doc.content}`
-          const { response: fallbackResponse } = await model.generateContent(fallbackPrompt)
-          const fallbackSummary = fallbackResponse.text().trim()
-          await prisma.document.update({
-            where: { id: documentId },
-            data: { summary: fallbackSummary }
-          })
 
-          // Embed the fallback summary
-          const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
-          const emb = await embedder.embedContent(fallbackSummary)
-          await prisma.document.update({
-            where: { id: documentId },
-            data: {
-              summaryEmbedding: JSON.stringify(emb.embedding.values),
-              summaryEmbeddingModel: embeddingModelName(),
+          // Process memories
+          const validMemories = parsed.memories
+            .filter((memory: string) => memory && memory.trim() && memory.length > 10)
+            .slice(0, 30) // Limit to prevent overflow
+
+          console.log(`[${new Date().toISOString()}] Processing ${validMemories.length} valid memories`)
+
+          // Create memory entries with batching
+          const BATCH_SIZE = 3
+          let createdMemories = 0
+
+          for (let i = 0; i < validMemories.length; i += BATCH_SIZE) {
+            const batch = validMemories.slice(i, i + BATCH_SIZE)
+            const batchPromises = batch.map(async (memory: string) => {
+              try {
+                const emb = await embedder.embedContent(memory)
+                const memoryId = uuidv4()
+
+                await prisma.memoryEntry.create({
+                  data: {
+                    id: memoryId,
+                    memory: memory.trim(),
+                    spaceId: spaceId,
+                    orgId: doc.orgId,
+                    userId: doc.userId,
+                    version: 1,
+                    isLatest: true,
+                    isInference: false,
+                    memoryEmbedding: JSON.stringify(emb.embedding.values),
+                    memoryEmbeddingModel: embeddingModelName(),
+                    metadata: {
+                      source: 'document_extraction',
+                      documentId: documentId
+                    },
+                  },
+                })
+
+                await prisma.memoryDocumentSource.create({
+                  data: {
+                    memoryEntryId: memoryId,
+                    documentId,
+                    relevanceScore: 100,
+                  },
+                })
+
+                createdMemories++
+                return memoryId
+              } catch (error) {
+                console.error(`Error creating memory for: ${memory.substring(0, 100)}`, error)
+                return null
+              }
+            })
+
+            await Promise.all(batchPromises)
+
+            // Rate limiting between batches
+            if (i + BATCH_SIZE < validMemories.length) {
+              await new Promise(resolve => setTimeout(resolve, 200))
             }
-          })
+          }
+
+          console.log(`[${new Date().toISOString()}] Completed memory extraction. Created ${createdMemories} memories.`)
+
+        } catch (error) {
+          console.error(`[${new Date().toISOString()}] Error in extract_document_essentials:`, error)
+          await generateFallbackContent(documentId, doc, spaceId, model, embedder)
         }
       })
-
-      //TODO:need to give better prompt for getting good questions
-      await step(documentId, 'generate_questions', async () => {
-        console.log("generate_questions")
-        const doc = await getDoc(documentId)
-        if (!doc || !doc.content) return
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-        // const prompt = `From the document below, generate 5 common questions a user might ask.\nReturn strictly as a comma-separated list with no extra text.\n\n---\n${doc.content}`
-
-        const prompt = `
-          You are analyzing a extracted text content from a document.
-          Your main goal is to remember the users information and preferences to make it useful later.
-          To do this we need to create list memories out of the document.
-          memories are short form,1 line sentence which can be used to remember information.
-          to create such list of memories ,first you have to create list of questions which represents the questions to those memories.
-          means the memories are the list of answers to those questions.
-
-          Your task is to generate **clear and concise questions** that:
-          - Would help retrive users preferences
-          - Would help to get the most information of the user
-          - Each question should be independent and self-contained.  
-
-          Return **only** a comma-separated list of questions (no numbering, no explanations, no extra text).
-
-          Example:
-          If the document is about a resume of a user, good questions might be:
-          "What is the users contact information?", "What is the users education?", "What is the users work experience?", "What is the users skills?", "What is the users interests?", "What is the users hobbies?"
-
-          Document:
-          ${doc.content}
-        `
-        const { response } = await model.generateContent(prompt)
-        const csv = response.text().trim()
-        const metadata = (doc.metadata || {}) as any
-        metadata.commonQuestions = csv
-        await prisma.document.update({
-          where: { id: documentId },
-          data: { metadata }
-        })
-      })
-
-      await step(documentId, 'iterate_questions', async () => {
-        console.log("iterate_questions")
-        const doc = await getDoc(documentId)
-        if (!doc) return
-        const metadata = (doc.metadata || {}) as any
-        const questions: string[] = typeof metadata.commonQuestions === 'string'
-          ? metadata.commonQuestions.split(',').map((s: string) => s.trim()).filter(Boolean)
-          : []
-
-        if (questions.length === 0) return
-
-        // Recover the document's space to set spaceContainerTag and space_id
-        const spaceRows = await prisma.documentsToSpaces.findMany({
-          where: { documentId },
-          include: { space: true }
-        })
-        const spaceId = spaceRows[0]?.spaceId
-
-        const answerModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-        const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
-
-        for (const q of questions) {
-          //TODO:need to give better prompt for getting good formatted answers
-          // const qPrompt = `Answer the question concisely using only the following document. If unknown, say "Unknown".\nQuestion: ${q}\n---\n${doc.content || ''}`
-          const qPrompt = `
-            You are building a **knowledge graph** from the following document.
-
-            Your task is to answer the question using only the information in the document, and express the answer as a **single factual statement** that clearly represents a relationship or key fact.  
-
-            Guidelines:
-            - Use **subject–predicate–object** or **entity–relation–value** phrasing whenever possible.
-            - Avoid adding extra context, explanations, or lists — each answer should be one atomic fact suitable for embedding as a memory node.
-            - Use only explicit or strongly implied information from the document.
-            - If the answer cannot be determined, reply exactly with "Unknown".
-            - Keep the response short, factual, and self-contained.
-            - The document text could have weird capitalization, so try to match the capitalization of the document.
-            - The document text could have weird spacing, so try to match the spacing of the document.
-
-            Example conversions:
-            ❌ “It was founded in 2015.”  
-            ✅ “Acme Corp was founded in 2015.”  
-            ❌ “Yes, it is located in Paris.”  
-            ✅ “Acme Corp's headquarters is located in Paris.”
-            ❌ “email ainapureyash@gmail.com”  
-            ✅ “{name}'s email is ainapureyash@gmail.com.”
-
-            Question: ${q}
-
-            Document:
-            ${doc.content || ''}
-          `
-          const { response } = await answerModel.generateContent(qPrompt)
-          const answer = response.text().trim()
-          if (!answer || /^unknown$/i.test(answer)) continue
-
-          // Create a memory that derives from this Q&A
-          const memoryText = `${answer}`
-          //here wee can add question:answer block or just the answer
-          // const memoryText = `${q}: ${answer}`
-          const emb = await embedder.embedContent(memoryText)
-          const memoryId = uuidv4()
-
-          //TODO: here we added derivesFrom commonquestion,this needs to be changed for better ones
-          await prisma.memoryEntry.create({
-            data: {
-              id: memoryId,
-              memory: memoryText,
-              spaceId: spaceId!,
-              orgId: doc.orgId,
-              userId: doc.userId,
-              version: 1,
-              isLatest: true,
-              isInference: true, // Mark as inference since it is derived from Q&A
-              memoryEmbedding: JSON.stringify(emb.embedding.values),
-              memoryEmbeddingModel: embeddingModelName(),
-              metadata: { derivesFrom: 'commonQuestion' },
-            },
-          })
-
-          await prisma.memoryDocumentSource.create({
-            data: {
-              memoryEntryId: memoryId,
-              documentId,
-              relevanceScore: 100,
-            },
-          })
-        }
-      })
-
-      //TODO: currently iterate_questions and generate_memories create memories which could get repeated,we need to fix that.
-      await step(documentId, 'generate_memories', async () => {
-        console.log("generate_memories")
-        const doc = await getDoc(documentId)
-        if (!doc || !doc.content) return
-        // Resolve the spaces for this document to set spaceContainerTag later
-        const spaceRows = await prisma.documentsToSpaces.findMany({
-          where: { documentId },
-          include: { space: true }
-        })
-        const spaceId = spaceRows[0]?.spaceId
-
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-        const prompt = `Extract concise, user-relevant facts ("memories") from the following document.\nReturn JSON array of objects with keys: memory (string), isInference (boolean).\nDo not include any extra text.\n\n---\n${doc.content}`
-        const { response } = await model.generateContent(prompt)
-        const text = response.text()
-        let items: Array<{ memory: string; isInference?: boolean }>
-        try { items = JSON.parse(text) } catch { items = [] }
-
-        const embedder = genAI.getGenerativeModel({ model: embeddingModelName() })
-        for (const it of items) {
-          if (!it.memory) continue
-          const emb = await embedder.embedContent(it.memory)
-          const memoryId = uuidv4()
-          await prisma.memoryEntry.create({
-            data: {
-              id: memoryId,
-              memory: it.memory,
-              spaceId: spaceId!,
-              orgId: doc.orgId,
-              userId: doc.userId,
-              version: 1,
-              isLatest: true,
-              isInference: it.isInference === true,
-              memoryEmbedding: JSON.stringify(emb.embedding.values),
-              memoryEmbeddingModel: embeddingModelName(),
-            },
-          })
-
-          // Link memory to document (source)
-          await prisma.memoryDocumentSource.create({
-            data: {
-              memoryEntryId: memoryId,
-              documentId,
-              relevanceScore: 100,
-            },
-          })
-        }
-      })
-
-
+      console.log("done...")
       await finalize(documentId, 'done')
     } catch (err) {
       console.error('Processing failed', err)
@@ -442,17 +388,62 @@ export async function registerWorkers() {
   })
 }
 
-function chunk(content: string, target = 1200, overlap = 200) {
-  const chunks: string[] = []
-  let i = 0
-  while (i < content.length) {
-    const end = Math.min(content.length, i + target)
-    chunks.push(content.slice(i, end))
-    i = end - overlap
-    if (i < 0) i = 0
-    if (end === content.length) break
+async function generateFallbackContent(documentId: string, doc: any, spaceId: string, model: any, embedder: any) {
+  console.log(`[${new Date().toISOString()}] Starting fallback content generation for document ${documentId}`)
+
+  try {
+    // Simple fallback prompt for title and summary only
+    const fallbackPrompt = `Provide a title (5-10 words) and summary (2-4 sentences) for this document.\n\nReturn as JSON: {"title": "...", "summary": "..."}\n\nDocument: ${doc.content.substring(0, 5000)}`
+    const { response } = await model.generateContent(fallbackPrompt)
+    const text = response.text().trim()
+
+    let title = 'Document'
+    let summary = 'No summary available.'
+
+    try {
+      const parsed = JSON.parse(text)
+      title = parsed.title || `Document - ${new Date().toISOString().split('T')[0]}`
+      summary = parsed.summary || 'Summary not available.'
+    } catch {
+      // If JSON parsing fails, extract title from first line and use raw text as summary
+      const firstLine = doc.content.split('\n')[0]?.trim() || 'Document'
+      title = firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine
+      summary = text || 'Summary extraction failed.'
+    }
+
+    // Update document with fallback content
+    await prisma.document.update({
+      where: { id: documentId },
+      data: { title, summary }
+    })
+
+    // Embed the summary
+    try {
+      const emb = await embedder.embedContent(summary)
+      await prisma.document.update({
+        where: { id: documentId },
+        data: {
+          summaryEmbedding: JSON.stringify(emb.embedding.values),
+          summaryEmbeddingModel: embeddingModelName(),
+        }
+      })
+    } catch (embedError) {
+      console.error('Failed to embed fallback summary:', embedError)
+    }
+
+    console.log(`[${new Date().toISOString()}] Fallback content generated for document ${documentId}`)
+  } catch (fallbackError) {
+    console.error(`[${new Date().toISOString()}] Fallback also failed for document ${documentId}:`, fallbackError)
+
+    // Ultimate fallback - minimal document update
+    await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        title: `Document ${documentId.substring(0, 8)}`,
+        summary: 'Content processing failed.'
+      }
+    })
   }
-  return chunks
 }
 
 async function extractText(documentId: string): Promise<{ text: string; type: string }> {
