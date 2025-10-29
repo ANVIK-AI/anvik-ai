@@ -12,6 +12,7 @@ import { requestLogger } from "./middleware/requestLogger.js";
 // import usersRoutes from "./api/users/users.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import documentRoutes from "./routes/document.routes";
+import chatRoutes from "./routes/chat.routes";
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -93,6 +94,7 @@ app.use('/v3/documents/file', upload.single('file'), (err, req, res, next) => {
 
 app.get("/health", (_req, res) => res.send({ status: "ok" }));
 app.use("/", documentRoutes);
+app.use("/", chatRoutes);
 // app.use("/api/auth", authRoutes);
 // app.use("/api/users", usersRoutes);
 

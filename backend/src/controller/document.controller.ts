@@ -4,10 +4,8 @@ import { getDocumentsWithMemories as getDocumentsService } from "../services/doc
 import { uploadDocumentFile as uploadDocumentService, updateDocumentMetadata as updateDocumentService } from "../services/document.service";
 import multer from "multer";
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs";
-import { boss, JOB_PROCESS_DOCUMENT } from "../queue";
 import logger from "../utils/logger";
 
 export async function getDocumentsWithMemories(req: Request, res: Response) {

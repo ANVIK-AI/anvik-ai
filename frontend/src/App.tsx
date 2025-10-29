@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { useGraphHighlights } from "./stores/highlights"
 import { useIsMobile } from './hooks/use-mobile'
 import { DocumentRoutesTester } from './pages/document-routes-tester'
+import { ChatTester } from './pages/chatTester'
 
 
 
@@ -24,9 +25,11 @@ function App() {
   const { documentIds: allHighlightDocumentIds } = useGraphHighlights()
   const { isOpen } = useChatOpen()
   const isMobile = useIsMobile()
-	const [showConnectAIModal, setShowConnectAIModal] = useState(false)
+  const [showConnectAIModal, setShowConnectAIModal] = useState(false)
   const [showAddMemoryView, setShowAddMemoryView] = useState(false)
   const [showTestPage, setShowTestPage] = useState(false)
+  const [showChatPage, setShowChatPage] = useState(false)
+
 
 
   const { isOpen: showGraphModal, setIsOpen: setShowGraphModal } =
@@ -132,86 +135,104 @@ function App() {
           </button>
           <DocumentRoutesTester />
         </div>
-      ) : (
-        <div>
-          <button
-            onClick={() => setShowTestPage(true)}
-            className="fixed top-4 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Test Document Routes
-          </button>
-          here it is
-          <Dialog open={showGraphModal} onOpenChange={setShowGraphModal}>
-            <DialogContent
-              className="w-[95vw] h-[95vh] p-0  max-w-6xl sm:max-w-6xl"
-              showCloseButton={true}
+      ) :
+        showChatPage ? (
+          <div className="relative">
+            <button
+              onClick={() => setShowChatPage(false)}
+              className="absolute top-4 left-4 z-50 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
-              <div className="w-full h-full">
-                <MemoryGraph
-                  documents={allDocuments}
-                  error={error}
-                  hasMore={hasMore}
-                  isLoading={isPending}
-                  isLoadingMore={isLoadingMore}
-                  loadMoreDocuments={loadMoreDocuments}
-                  totalLoaded={totalLoaded}
-                  variant="console"
-                  showSpacesSelector={true}
-                  highlightDocumentIds={allHighlightDocumentIds}
-                  highlightsVisible={isOpen}
+              ← Back to Main App
+            </button>
+            <ChatTester />
+          </div>
+        ) :
+          (
+            <div>
+              <button
+                onClick={() => setShowTestPage(true)}
+                className="fixed top-4 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Test Document Routes
+              </button>
+              <button
+                onClick={() => setShowChatPage(true)}
+                className="fixed top-20 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Test chat Routes
+              </button>
+              here it is
+              <Dialog open={showGraphModal} onOpenChange={setShowGraphModal}>
+                <DialogContent
+                  className="w-[95vw] h-[95vh] p-0  max-w-6xl sm:max-w-6xl"
+                  showCloseButton={true}
                 >
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {!isMobile ? (
-                      <div>
-                        connect ai modal
-                      </div>
-                      // <ConnectAIModal
-                      //   onOpenChange={setShowConnectAIModal}
-                      //   open={showConnectAIModal}
-                      // >
-                      //   <div className="rounded-xl overflow-hidden cursor-pointer hover:bg-white/5 transition-colors p-6">
-                      //     <div className="relative z-10 text-slate-200 text-center">
-                      //       <div className="flex flex-col gap-3">
-                      //         <button
-                      //           className="text-sm text-blue-400 hover:text-blue-300 transition-colors underline"
-                      //           onClick={(e) => {
-                      //             e.stopPropagation()
-                      //             setShowAddMemoryView(true)
-                      //             setShowConnectAIModal(false)
-                      //           }}
-                      //           type="button"
-                      //         >
-                      //           Add your first memory
-                      //         </button>
-                      //       </div>
-                      //     </div>
-                      //   </div>
-                      // </ConnectAIModal>
-                    ) : (
-                      <div className="rounded-xl overflow-hidden cursor-pointer hover:bg-white/5 transition-colors p-6">
-                        <div className="relative z-10 text-slate-200 text-center">
-                          <div className="flex flex-col gap-3">
-                            <button
-                              className="text-sm text-blue-400 hover:text-blue-300 transition-colors underline"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setShowAddMemoryView(true)
-                              }}
-                              type="button"
-                            >
-                              Add your first memory
-                            </button>
+                  <div className="w-full h-full">
+                    <MemoryGraph
+                      documents={allDocuments}
+                      error={error}
+                      hasMore={hasMore}
+                      isLoading={isPending}
+                      isLoadingMore={isLoadingMore}
+                      loadMoreDocuments={loadMoreDocuments}
+                      totalLoaded={totalLoaded}
+                      variant="console"
+                      showSpacesSelector={true}
+                      highlightDocumentIds={allHighlightDocumentIds}
+                      highlightsVisible={isOpen}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        {!isMobile ? (
+                          <div>
+                            connect ai modal
                           </div>
-                        </div>
+                          // <ConnectAIModal
+                          //   onOpenChange={setShowConnectAIModal}
+                          //   open={showConnectAIModal}
+                          // >
+                          //   <div className="rounded-xl overflow-hidden cursor-pointer hover:bg-white/5 transition-colors p-6">
+                          //     <div className="relative z-10 text-slate-200 text-center">
+                          //       <div className="flex flex-col gap-3">
+                          //         <button
+                          //           className="text-sm text-blue-400 hover:text-blue-300 transition-colors underline"
+                          //           onClick={(e) => {
+                          //             e.stopPropagation()
+                          //             setShowAddMemoryView(true)
+                          //             setShowConnectAIModal(false)
+                          //           }}
+                          //           type="button"
+                          //         >
+                          //           Add your first memory
+                          //         </button>
+                          //       </div>
+                          //     </div>
+                          //   </div>
+                          // </ConnectAIModal>
+                        ) : (
+                          <div className="rounded-xl overflow-hidden cursor-pointer hover:bg-white/5 transition-colors p-6">
+                            <div className="relative z-10 text-slate-200 text-center">
+                              <div className="flex flex-col gap-3">
+                                <button
+                                  className="text-sm text-blue-400 hover:text-blue-300 transition-colors underline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setShowAddMemoryView(true)
+                                  }}
+                                  type="button"
+                                >
+                                  Add your first memory
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </MemoryGraph>
                   </div>
-                </MemoryGraph>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
     </div>
   )
 }

@@ -21,8 +21,10 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@ai-sdk/google": "^2.0.25",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.17.1",
+    "ai": "^5.0.82",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
