@@ -1,7 +1,7 @@
 import './App.css'
 import { MemoryGraph } from "./components/memory-graph"
 import { Dialog, DialogContent } from "./ui/dialog"
-import { useChatOpen, useGraphModal, useProject } from "./stores"
+import { useChatOpen, useGraphModal } from "./stores"
 import { useCallback, useMemo, useState } from 'react'
 import type { DocumentWithMemories } from './lib/types'
 import type { DocumentsWithMemoriesResponseSchema } from './validation/api'
@@ -12,6 +12,9 @@ import { useGraphHighlights } from "./stores/highlights"
 import { useIsMobile } from './hooks/use-mobile'
 import { DocumentRoutesTester } from './pages/document-routes-tester'
 import { ChatTester } from './pages/chatTester'
+import { BrowserRouter, Route, Routes } from "react-router-dom"
+import Layout from './pages/layout'
+import Home from './pages/Home'
 
 
 
@@ -21,11 +24,9 @@ type DocumentsResponse = z.infer<typeof DocumentsWithMemoriesResponseSchema>
 function App() {
 
   const [injectedDocs, setInjectedDocs] = useState<DocumentWithMemories[]>([])
-  const { selectedProject } = useProject()
   const { documentIds: allHighlightDocumentIds } = useGraphHighlights()
   const { isOpen } = useChatOpen()
   const isMobile = useIsMobile()
-  const [showConnectAIModal, setShowConnectAIModal] = useState(false)
   const [showAddMemoryView, setShowAddMemoryView] = useState(false)
   const [showTestPage, setShowTestPage] = useState(false)
   const [showChatPage, setShowChatPage] = useState(false)
@@ -35,15 +36,9 @@ function App() {
   const { isOpen: showGraphModal, setIsOpen: setShowGraphModal } =
     useGraphModal()
 
-
-
   const IS_DEV = "development"
   const PAGE_SIZE = IS_DEV ? 100 : 100
   const MAX_TOTAL = 1000
-
-
-
-
 
   const {
     data,
@@ -89,12 +84,8 @@ function App() {
       return undefined
     },
     staleTime: 5 * 60 * 1000,
-    // enabled: !!user,
     enabled: true,
   })
-
-
-
 
   const baseDocuments = useMemo(() => {
     return (
@@ -124,6 +115,27 @@ function App() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   return (
+    <div className='bg-[#090B0E]'>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/chat" element={<TestPage showTestPage={showTestPage} setShowTestPage={setShowTestPage} showChatPage={showChatPage} setShowChatPage={setShowChatPage}
+              showGraphModal={showGraphModal} setShowGraphModal={setShowGraphModal} allDocuments={allDocuments} error={error} hasMore={hasMore} isPending={isPending} isLoadingMore={isLoadingMore} loadMoreDocuments={loadMoreDocuments} totalLoaded={totalLoaded} allHighlightDocumentIds={allHighlightDocumentIds} isOpen={isOpen}
+              isMobile={isMobile} setShowAddMemoryView={setShowAddMemoryView} />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </div>
+  )
+}
+
+const TestPage = ({ showTestPage, setShowTestPage, showChatPage, setShowChatPage, showGraphModal, setShowGraphModal
+  , allDocuments, error, hasMore, isPending, isLoadingMore, loadMoreDocuments, totalLoaded, allHighlightDocumentIds, isOpen
+  , isMobile, setShowAddMemoryView
+}: any) => {
+
+  return (
     <div>
       {showTestPage ? (
         <div className="relative">
@@ -151,17 +163,17 @@ function App() {
             <div>
               <button
                 onClick={() => setShowTestPage(true)}
-                className="fixed top-4 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="fixed top-20 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Test Document Routes
               </button>
               <button
                 onClick={() => setShowChatPage(true)}
-                className="fixed top-20 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="fixed top-40 right-4 z-50 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Test chat Routes
               </button>
-              here it is
+              <Home />
               <Dialog open={showGraphModal} onOpenChange={setShowGraphModal}>
                 <DialogContent
                   className="w-[95vw] h-[95vh] p-0  max-w-6xl sm:max-w-6xl"
@@ -186,28 +198,6 @@ function App() {
                           <div>
                             connect ai modal
                           </div>
-                          // <ConnectAIModal
-                          //   onOpenChange={setShowConnectAIModal}
-                          //   open={showConnectAIModal}
-                          // >
-                          //   <div className="rounded-xl overflow-hidden cursor-pointer hover:bg-white/5 transition-colors p-6">
-                          //     <div className="relative z-10 text-slate-200 text-center">
-                          //       <div className="flex flex-col gap-3">
-                          //         <button
-                          //           className="text-sm text-blue-400 hover:text-blue-300 transition-colors underline"
-                          //           onClick={(e) => {
-                          //             e.stopPropagation()
-                          //             setShowAddMemoryView(true)
-                          //             setShowConnectAIModal(false)
-                          //           }}
-                          //           type="button"
-                          //         >
-                          //           Add your first memory
-                          //         </button>
-                          //       </div>
-                          //     </div>
-                          //   </div>
-                          // </ConnectAIModal>
                         ) : (
                           <div className="rounded-xl overflow-hidden cursor-pointer hover:bg-white/5 transition-colors p-6">
                             <div className="relative z-10 text-slate-200 text-center">
@@ -233,6 +223,8 @@ function App() {
               </Dialog>
             </div>
           )}
+
+
     </div>
   )
 }

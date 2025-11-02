@@ -335,11 +335,19 @@ export async function chatRequest(req: Request, res: Response) {
       iterationCount++;
       console.log(`[Iteration ${iterationCount}] Starting generation`);
 
+      const now = new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        dateStyle: 'full',
+        timeStyle: 'medium'
+      });
+
       const result = await streamText({
         model: google('gemini-2.5-flash'),
         messages: conversationMessages,
         tools: tools,
         system: `You are a helpful assistant with access to the user's personal memories.
+
+        [Current Date & Time]: ${now}
 
         When answering questions:
 

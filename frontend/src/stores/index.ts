@@ -84,7 +84,7 @@ interface GraphModalState {
 }
 
 export const useGraphModalStore = create<GraphModalState>()((set, get) => ({
-	isOpen: true,
+	isOpen: false,
 	setIsOpen: (isOpen) => set({ isOpen }),
 	toggleGraphModal: () => set({ isOpen: !get().isOpen }),
 }))

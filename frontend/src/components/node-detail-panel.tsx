@@ -1,8 +1,6 @@
-"use client";
-
 import { cn } from "../lib/utils";
 import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
+import { Button } from "@ui/components/button"
 import { GlassMenuEffect } from "../ui/glass-effect";
 import { Brain, Calendar, ExternalLink, FileText, Hash, X } from "lucide-react";
 import { motion } from "motion/react";
