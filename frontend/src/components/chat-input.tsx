@@ -52,7 +52,7 @@ export function ChatInput() {
 			<div className="w-full max-w-4xl">
 				<div className="text-start mb-4">
 					<h2 className="text-3xl font-bold text-foreground text-slate-200">
-						Welcome, <span className="text-primary">Yash ainapure</span>
+						Welcome, <span className="text-primary">User</span>
 					</h2>
 				</div>
 				<div className="relative">

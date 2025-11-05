@@ -37,7 +37,7 @@ export function GraphDialog() {
 		hasNextPage,
 		fetchNextPage,
 	} = useInfiniteQuery<DocumentsResponse, Error>({
-		queryKey: ["documents-with-memories", selectedProject],
+		queryKey: ["documents-with-memories"],
 		initialPageParam: 1,
 		queryFn: async ({ pageParam }) => {
 			const response = await $fetch("@post/documents/documents", {
@@ -46,7 +46,7 @@ export function GraphDialog() {
 					limit: (pageParam as number) === 1 ? (IS_DEV ? 500 : 500) : PAGE_SIZE,
 					sort: "createdAt",
 					order: "desc",
-					containerTags: selectedProject ? [selectedProject] : undefined,
+					containerTags: undefined,
 				},
 				disableValidation: true,
 			})
@@ -54,6 +54,8 @@ export function GraphDialog() {
 			if (response.error) {
 				throw new Error(response.error?.message || "Failed to fetch documents")
 			}
+			console.log("graph data")
+			console.log(response)
 
 			return response.data
 		},
@@ -71,7 +73,7 @@ export function GraphDialog() {
 			return undefined
 		},
 		staleTime: 5 * 60 * 1000,
-		enabled: true, // Only run query if user is authenticated
+		enabled: true,
 	})
 
 	const baseDocuments = useMemo(() => {

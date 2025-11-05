@@ -257,7 +257,7 @@ export function ChatTester() {
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1>Chat Route Tester</h1>
+      <h1 className='text-slate-200'>Chat Route Tester</h1>
       
       {/* Health Check */}
       <div style={{ marginBottom: '20px' }}>
@@ -278,7 +278,7 @@ export function ChatTester() {
 
       {/* Project ID Input */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+        <label className='text-slate-200' style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
           Project ID (Space ID):
         </label>
         <input
