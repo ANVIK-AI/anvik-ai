@@ -67,9 +67,10 @@ const upload = multer({
   }
 })
 
-// app.use(requestLogger);
 app.use(express.json());
 app.use(helmet());
+app.use(express.urlencoded({ extended: true }));
+// app.use(requestLogger);
 app.use(cors(corsOptions));
 app.use(
   rateLimit({

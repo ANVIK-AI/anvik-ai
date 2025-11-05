@@ -31,6 +31,7 @@
     "slate": "^0.118.1",
     "slate-react": "^0.118.2",
     "sonner": "^2.0.7",
+    "streamdown": "^1.4.0",
     "tailwind-merge": "^3.3.1",
     "zod": "^3.25.76",
     "zod-openapi": "^4.2.4",

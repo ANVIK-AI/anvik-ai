@@ -15,6 +15,7 @@ import { ChatTester } from './pages/chatTester'
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 import Layout from './pages/layout'
 import Home from './pages/Home'
+import { ChatMessages } from './components/views/chat/chat-messages'
 
 
 
@@ -123,6 +124,7 @@ function App() {
             <Route path="/chat" element={<TestPage showTestPage={showTestPage} setShowTestPage={setShowTestPage} showChatPage={showChatPage} setShowChatPage={setShowChatPage}
               showGraphModal={showGraphModal} setShowGraphModal={setShowGraphModal} allDocuments={allDocuments} error={error} hasMore={hasMore} isPending={isPending} isLoadingMore={isLoadingMore} loadMoreDocuments={loadMoreDocuments} totalLoaded={totalLoaded} allHighlightDocumentIds={allHighlightDocumentIds} isOpen={isOpen}
               isMobile={isMobile} setShowAddMemoryView={setShowAddMemoryView} />} />
+            <Route path="/chat/:id" element={<ChatMessages />} />
           </Route>
         </Routes>
       </BrowserRouter>

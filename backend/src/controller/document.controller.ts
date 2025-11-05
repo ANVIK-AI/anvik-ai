@@ -9,8 +9,8 @@ import fs from "fs";
 import logger from "../utils/logger";
 
 export async function getDocumentsWithMemories(req: Request, res: Response) {
-    console.log("📥 Received request to /documents/documents");
-    console.log("Request body:", req.body);
+    // console.log("📥 Received request to /documents/documents");
+    // console.log("Request body:", req.body);
 
     // 1. Validate the request body against the Zod schema
     const validationResult = DocumentsWithMemoriesQuerySchema.safeParse(req.body);
@@ -24,13 +24,13 @@ export async function getDocumentsWithMemories(req: Request, res: Response) {
     }
 
     try {
-        console.log("✅ Request validated, calling service...");
+        // console.log("✅ Request validated, calling service...");
         // 2. Pass the validated data to the service
         const data = await getDocumentsService(validationResult.data);
-        console.log("✅ Service returned data:", {
-            documentsCount: data.documents.length,
-            pagination: data.pagination
-        });
+        // console.log("✅ Service returned data:", {
+        //     documentsCount: data.documents.length,
+        //     pagination: data.pagination
+        // });
 
         // 3. Return the formatted response
         return res.status(200).json(data);
@@ -108,8 +108,8 @@ export async function uploadDocumentFile(req: Request, res: Response) {
       return res.status(400).json({ error: 'Invalid containerTags format' })
     }
 
-    logger.info("calling service")
-    console.log("calling service")
+    logger.info("calling service file upload")
+    console.log("calling service file upload")
     // Call the service to handle the upload
     const result = await uploadDocumentService({
       file,

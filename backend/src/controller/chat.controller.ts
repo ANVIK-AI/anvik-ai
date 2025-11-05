@@ -241,6 +241,9 @@ const memoryService = new MemoryService();
 
 export async function chatRequest(req: Request, res: Response) {
   try {
+    // console.log("REQ BODY:", req.body);
+    // console.log("REQ HEADERS:", req.headers);
+
     const { messages, metadata } = chatRequestSchema.parse(req.body);
     const { projectId } = metadata;
 
