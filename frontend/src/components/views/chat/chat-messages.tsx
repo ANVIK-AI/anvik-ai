@@ -1,655 +1,856 @@
-"use client"
-
-import { useChat, useCompletion } from "@ai-sdk/react"
-import { cn } from "@lib/utils"
-import { Button } from "@ui/components/button"
-import { DefaultChatTransport } from "ai"
+import { useChat, useCompletion } from "@ai-sdk/react";
+import { cn } from "@lib/utils";
+import { Button } from "@ui/components/button";
+import { DefaultChatTransport } from "ai";
 import {
-	ArrowUp,
-	Check,
-	ChevronDown,
-	ChevronRight,
-	Copy,
-	RotateCcw,
-	X,
-} from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
-import { Streamdown } from "streamdown"
-import { TextShimmer } from "@/components/text-shimmer"
-import { useProject } from "@/stores"
-import { usePersistentChat } from "@/stores/chat"
-import { useGraphHighlights } from "@/stores/highlights"
-import { Spinner } from "../../spinner"
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  RotateCcw,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Streamdown } from "streamdown";
+import { TextShimmer } from "@/components/text-shimmer";
+import { useProject } from "@/stores";
+import { usePersistentChat } from "@/stores/chat";
+import { useGraphHighlights } from "@/stores/highlights";
+import { Spinner } from "../../spinner";
+import { nanoid } from "nanoid";
 
 interface MemoryResult {
-	documentId?: string
-	title?: string
-	content?: string
-	url?: string
-	score?: number
+  documentId?: string;
+  title?: string;
+  content?: string;
+  url?: string;
+  score?: number;
 }
 
 interface ExpandableMemoriesProps {
-	foundCount: number
-	results: MemoryResult[]
+  foundCount: number;
+  results: MemoryResult[];
 }
 
 function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
-	const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false);
 
-	if (foundCount === 0) {
-		return (
-			<div className="text-sm flex items-center gap-2 text-muted-foreground">
-				<Check className="size-4" /> No memories found
-			</div>
-		)
-	}
+  if (foundCount === 0) {
+    return (
+      <div className="text-sm flex items-center gap-2 text-muted-foreground">
+        <Check className="size-4" /> No memories found
+      </div>
+    );
+  }
 
-	return (
-		<div className="text-sm">
-			<button
-				className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-				onClick={() => setIsExpanded(!isExpanded)}
-				type="button"
-			>
-				{isExpanded ? (
-					<ChevronDown className="size-4" />
-				) : (
-					<ChevronRight className="size-4" />
-				)}
-				Related memories
-			</button>
+  return (
+    <div className="text-sm">
+      <button
+        className="flex items-center gap-2 text-muted-foreground hover:text-slate-200 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+        type="button"
+      >
+        {isExpanded ? (
+          <ChevronDown className="size-4" />
+        ) : (
+          <ChevronRight className="size-4" />
+        )}
+        Related memories
+      </button>
 
-			{isExpanded && results.length > 0 && (
-				<div className="mt-2 ml-6 space-y-2 max-h-48 overflow-y-auto grid grid-cols-3 gap-2">
-					{results.map((result, index) => {
-						const isClickable =
-							result.url &&
-							(result.url.startsWith("http://") ||
-								result.url.startsWith("https://"))
+      {isExpanded && results.length > 0 && (
+        <div className="mt-2 ml-6 space-y-2 max-h-48 overflow-y-auto grid grid-cols-3 gap-2">
+          {results.map((result, index) => {
+            const isClickable =
+              result.url &&
+              (result.url.startsWith("http://") ||
+                result.url.startsWith("https://"));
 
-						const content = (
-							<>
-								{result.title && (
-									<div className="font-medium text-sm mb-1 text-foreground">
-										{result.title}
-									</div>
-								)}
-								{result.content && (
-									<div className="text-xs text-muted-foreground line-clamp-2">
-										{result.content}
-									</div>
-								)}
-								{result.url && (
-									<div className="text-xs text-blue-600 dark:text-blue-400 mt-1 truncate">
-										{result.url}
-									</div>
-								)}
-								{result.score && (
-									<div className="text-xs text-muted-foreground mt-1">
-										Score: {(result.score * 100).toFixed(1)}%
-									</div>
-								)}
-							</>
-						)
+            const content = (
+              <>
+                {result.title && (
+                  <div className="font-medium text-sm mb-1 text-slate-200">
+                    {result.title}
+                  </div>
+                )}
+                {result.content && (
+                  <div className="text-xs text-muted-foreground line-clamp-2">
+                    {result.content}
+                  </div>
+                )}
+                {result.url && (
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-1 truncate">
+                    {result.url}
+                  </div>
+                )}
+                {result.score && (
+                  <div className="text-xs text-muted-slate-200 mt-1">
+                    Score: {(result.score * 100).toFixed(1)}%
+                  </div>
+                )}
+              </>
+            );
 
-						if (isClickable) {
-							return (
-								<a
-									className="block p-2 bg-accent/50 rounded-md border border-border hover:bg-accent transition-colors cursor-pointer"
-									href={result.url}
-									key={result.documentId || index}
-									rel="noopener noreferrer"
-									target="_blank"
-								>
-									{content}
-								</a>
-							)
-						}
+            if (isClickable) {
+              return (
+                <a
+                  className="block p-2 bg-accent/50 rounded-md border border-border hover:bg-accent transition-colors cursor-pointer"
+                  href={result.url}
+                  key={result.documentId || index}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  {content}
+                </a>
+              );
+            }
 
-						return (
-							<div
-								className="p-2 bg-accent/50 rounded-md border border-border"
-								key={result.documentId || index}
-							>
-								{content}
-							</div>
-						)
-					})}
-				</div>
-			)}
-		</div>
-	)
+            return (
+              <div
+                className="p-2 bg-accent/50 rounded-md border border-border"
+                key={result.documentId || index}
+              >
+                {content}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
-	const scrollContainerRef = useRef<HTMLDivElement>(null)
-	const bottomRef = useRef<HTMLDivElement>(null)
-	const [isAutoScroll, setIsAutoScroll] = useState(true)
-	const [isFarFromBottom, setIsFarFromBottom] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const [isAutoScroll, setIsAutoScroll] = useState(true);
+  const [isFarFromBottom, setIsFarFromBottom] = useState(false);
 
-	const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-		const node = bottomRef.current
-		if (node) node.scrollIntoView({ behavior, block: "end" })
-	}, [])
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const node = bottomRef.current;
+    if (node) node.scrollIntoView({ behavior, block: "end" });
+  }, []);
 
-	useEffect(function observeBottomVisibility() {
-		const container = scrollContainerRef.current
-		const sentinel = bottomRef.current
-		if (!container || !sentinel) return
+  useEffect(function observeBottomVisibility() {
+    const container = scrollContainerRef.current;
+    const sentinel = bottomRef.current;
+    if (!container || !sentinel) return;
 
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (!entries || entries.length === 0) return
-				const isIntersecting = entries.some((e) => e.isIntersecting)
-				setIsAutoScroll(isIntersecting)
-			},
-			{ root: container, rootMargin: "0px 0px 80px 0px", threshold: 0 },
-		)
-		observer.observe(sentinel)
-		return () => observer.disconnect()
-	}, [])
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries || entries.length === 0) return;
+        const isIntersecting = entries.some((e) => e.isIntersecting);
+        setIsAutoScroll(isIntersecting);
+      },
+      { root: container, rootMargin: "0px 0px 80px 0px", threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
 
-	useEffect(
-		function observeContentResize() {
-			const container = scrollContainerRef.current
-			if (!container) return
-			const resizeObserver = new ResizeObserver(() => {
-				if (isAutoScroll) scrollToBottom("auto")
-				const distanceFromBottom =
-					container.scrollHeight - container.scrollTop - container.clientHeight
-				setIsFarFromBottom(distanceFromBottom > 100)
-			})
-			resizeObserver.observe(container)
-			return () => resizeObserver.disconnect()
-		},
-		[isAutoScroll, scrollToBottom],
-	)
+  useEffect(
+    function observeContentResize() {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const resizeObserver = new ResizeObserver(() => {
+        if (isAutoScroll) scrollToBottom("auto");
+        const distanceFromBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight;
+        setIsFarFromBottom(distanceFromBottom > 100);
+      });
+      resizeObserver.observe(container);
+      return () => resizeObserver.disconnect();
+    },
+    [isAutoScroll, scrollToBottom]
+  );
 
-	function enableAutoScroll() {
-		setIsAutoScroll(true)
-	}
+  function enableAutoScroll() {
+    setIsAutoScroll(true);
+  }
 
-	useEffect(
-		function autoScrollOnNewContent() {
-			if (isAutoScroll) scrollToBottom("auto")
-		},
-		[isAutoScroll, scrollToBottom, ...triggerKeys],
-	)
+  useEffect(
+    function autoScrollOnNewContent() {
+      if (isAutoScroll) scrollToBottom("auto");
+    },
+    [isAutoScroll, scrollToBottom, ...triggerKeys]
+  );
 
-	const recomputeDistanceFromBottom = useCallback(() => {
-		const container = scrollContainerRef.current
-		if (!container) return
-		const distanceFromBottom =
-			container.scrollHeight - container.scrollTop - container.clientHeight
-		setIsFarFromBottom(distanceFromBottom > 100)
-	}, [])
+  const recomputeDistanceFromBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    setIsFarFromBottom(distanceFromBottom > 100);
+  }, []);
 
-	useEffect(() => {
-		recomputeDistanceFromBottom()
-	}, [recomputeDistanceFromBottom, ...triggerKeys])
+  useEffect(() => {
+    recomputeDistanceFromBottom();
+  }, [recomputeDistanceFromBottom, ...triggerKeys]);
 
-	function onScroll() {
-		recomputeDistanceFromBottom()
-	}
+  function onScroll() {
+    recomputeDistanceFromBottom();
+  }
 
-	return {
-		scrollContainerRef,
-		bottomRef,
-		isAutoScroll,
-		isFarFromBottom,
-		onScroll,
-		enableAutoScroll,
-		scrollToBottom,
-	} as const
+  return {
+    scrollContainerRef,
+    bottomRef,
+    isAutoScroll,
+    isFarFromBottom,
+    onScroll,
+    enableAutoScroll,
+    scrollToBottom,
+  } as const;
 }
 
 export function ChatMessages() {
-	const { selectedProject } = useProject()
-	const {
-		currentChatId,
-		setCurrentChatId,
-		setConversation,
-		getCurrentConversation,
-		setConversationTitle,
-		getCurrentChat,
-	} = usePersistentChat()
+  
+  //TODO:use this method to set the project id to pass it to backend
+  const { selectedProject,setSelectedProject } = useProject();
+  setSelectedProject("6a5bcd82-0d46-4956-a1e2-41c18bce25df")
+  // const { selectedProject } = useProject(); 
+  const { id: routeChatId } = useParams();
+  const {
+    currentChatId,
+    setCurrentChatId,
+    setConversation,
+    getCurrentConversation,
+    setConversationTitle,
+    getCurrentChat,
+  } = usePersistentChat();
 
-	const storageKey = `chat-model-${currentChatId}`
+  const storageKey = `chat-model-${currentChatId}`;
 
-	const [input, setInput] = useState("")
-	const [selectedModel, setSelectedModel] = useState<
-		"gpt-5" | "claude-sonnet-4.5" | "gemini-2.5-pro"
-	>(
-		(sessionStorage.getItem(storageKey) as
-			| "gpt-5"
-			| "claude-sonnet-4.5"
-			| "gemini-2.5-pro") ||
-		"gemini-2.5-pro" ||
-		"gemini-2.5-pro",
-	)
-	const activeChatIdRef = useRef<string | null>(null)
-	const shouldGenerateTitleRef = useRef<boolean>(false)
-	const hasRunInitialMessageRef = useRef<boolean>(false)
+  const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState<
+    "gpt-5" | "claude-sonnet-4.5" | "gemini-2.5-pro"
+  >(
+    (sessionStorage.getItem(storageKey) as
+      | "gpt-5"
+      | "claude-sonnet-4.5"
+      | "gemini-2.5-pro") ||
+      "gemini-2.5-pro" ||
+      "gemini-2.5-pro"
+  );
+  const activeChatIdRef = useRef<string | null>(null);
+  const shouldGenerateTitleRef = useRef<boolean>(false);
+  const hasRunInitialMessageRef = useRef<boolean>(false);
 
-	const { setDocumentIds } = useGraphHighlights()
+  const { setDocumentIds } = useGraphHighlights();
 
-	const { messages, sendMessage, status, stop, setMessages, id, regenerate } =
-		useChat({
-			id: currentChatId ?? undefined,
-			transport: new DefaultChatTransport({
-				api: "http://localhost:4000/chat",
-				credentials: "include",
-				fetch: (url, options: any) => {
-					let original: any = {};
-					if (options?.body) {
-						try {
-							original = typeof options.body === 'string' 
-								? JSON.parse(options.body) 
-								: options.body;
-						} catch (e) {
-							console.error('Failed to parse request body:', e);
-						}
-					}
+  const { messages, sendMessage, status, stop, setMessages, id, regenerate } =
+    useChat({
+      id: currentChatId ?? undefined,
+      transport: new DefaultChatTransport({
+        api: `${import.meta.env.VITE_PUBLIC_BACKEND_URL}/chat${currentChatId ? `/${currentChatId}` : ""}`,
+        fetch: (url, options: any) => {
+          let original: any = {};
+          if (options?.body) {
+            try {
+              original =
+                typeof options.body === "string"
+                  ? JSON.parse(options.body)
+                  : options.body;
+            } catch (e) {
+              console.error("Failed to parse request body:", e);
+            }
+          }
+          // Properly handle headers to avoid duplication
+          const headers = new Headers(options?.headers || {});
+          headers.set("Content-Type", "application/json");
 
-					// remove unwanted fields
-					const { id, trigger, ...rest } = original;
+          const requestBody = JSON.stringify({
+            ...original, // preserve id, trigger, messages, etc.
+            metadata: {
+              ...(original?.metadata ?? {}),
+              projectId: selectedProject ?? "sm_project_default",
+              model: selectedModel,
+            },
+          });
 
-					// Properly handle headers to avoid duplication
-					const headers = new Headers(options?.headers || {});
-					headers.set("Content-Type", "application/json");
+          return fetch(url, {
+            ...options,
+            body: requestBody,
+            headers,
+            // include cookies if backend uses them; harmless otherwise
+            // credentials: (options as any)?.credentials ?? "include",
+          });
+        },
+      }),
+      onFinish: (result) => {
+        console.log("✅ Message finished:", result);
+        const activeId = activeChatIdRef.current;
+        if (!activeId) return;
+        if (result.message.role !== "assistant") return;
 
-					const requestBody = JSON.stringify({
-						...rest, // contains messages, metadata, etc.
-						metadata: {
-							projectId: selectedProject,
-							model: selectedModel,
-						},
-					});
+        if (shouldGenerateTitleRef.current) {
+          const textPart = result.message.parts.find(
+            (p: any) => p?.type === "text"
+          ) as any;
+          const text = textPart?.text?.trim();
+          if (text) {
+            shouldGenerateTitleRef.current = false;
+            complete(text);
+          }
+        }
+      },
+      onError: (error) => {
+        console.error("❌ Chat error:", error);
+      },
+    });
 
-					return fetch(url, {
-						...options,
-						body: requestBody,
-						headers,
-					});
-				}
+  // Automatically submit tool results back to the backend when available
+  const processedToolCallsRef = useRef<Set<string>>(new Set());
+  const isSubmittingToolRef = useRef<boolean>(false);
 
-			}),
-			onFinish: (result) => {
-				const activeId = activeChatIdRef.current;
-				if (!activeId) return;
-				if (result.message.role !== "assistant") return;
+  useEffect(() => {
+    // Find the most recent assistant message containing a tool with output-available
+    const assistant = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!assistant) return;
+    const toolPart = [...(assistant.parts as any[])].reverse().find((p) =>
+      typeof p?.type === "string" && p.type.startsWith("tool-") && p?.state === "output-available"
+    ) as any | undefined;
+    if (!toolPart) return;
 
-				if (shouldGenerateTitleRef.current) {
-					const textPart = result.message.parts.find(
-						(p: any) => p?.type === "text",
-					) as any;
-					const text = textPart?.text?.trim();
-					if (text) {
-						shouldGenerateTitleRef.current = false;
-						complete(text);
-					}
-				}
-			},
-		});
+    const toolCallId: string | undefined = toolPart.toolCallId || toolPart.id;
+    if (!toolCallId) return;
+    if (processedToolCallsRef.current.has(toolCallId)) return;
+    if (isSubmittingToolRef.current) return;
 
+    const activeId = activeChatIdRef.current;
+    if (!activeId) return;
 
-	useEffect(() => {
-		activeChatIdRef.current = currentChatId ?? id ?? null
-	}, [currentChatId, id])
+    // Submit the tool result to progress the conversation
+    const submit = async () => {
+      try {
+        isSubmittingToolRef.current = true;
+        processedToolCallsRef.current.add(toolCallId);
 
-	useEffect(() => {
-		if (currentChatId) {
-			const savedModel = sessionStorage.getItem(storageKey) as
-				| "gpt-5"
-				| "claude-sonnet-4.5"
-				| "gemini-2.5-pro"
+        const url = `${import.meta.env.VITE_PUBLIC_BACKEND_URL}/chat/${activeId}`;
 
-			if (
-				savedModel &&
-				["gpt-5", "claude-sonnet-4.5", "gemini-2.5-pro"].includes(savedModel)
-			) {
-				setSelectedModel(savedModel)
-			}
-		}
-	}, [currentChatId])
+        const payload = {
+          id: activeId,
+          messages,
+          trigger: "submit-tool-result",
+          metadata: {
+            projectId: selectedProject ?? "sm_project_default",
+            model: selectedModel,
+          },
+        };
 
-	useEffect(() => {
-		if (currentChatId && !hasRunInitialMessageRef.current) {
-			// Check if there's an initial message from the home page in sessionStorage
-			const storageKey = `chat-initial-${currentChatId}`
-			const initialMessage = sessionStorage.getItem(storageKey)
+        const headers = new Headers();
+        headers.set("Content-Type", "application/json");
+        headers.set("Accept", "text/event-stream");
 
-			if (initialMessage) {
-				// Clean up the storage and send the message
-				sessionStorage.removeItem(storageKey)
-				sendMessage({ text: initialMessage })
-				hasRunInitialMessageRef.current = true
-			}
-		}
-	}, [currentChatId])
+        const controller = new AbortController();
+        const signal = controller.signal;
 
-	useEffect(() => {
-		if (id && id !== currentChatId) {
-			setCurrentChatId(id)
-		}
-	}, [id])
+        // Create a new streaming assistant message to render the final answer
+        const streamingId = `assistant-${nanoid(8)}`;
+        setMessages((prev: any[]) => [
+          ...prev,
+          {
+            id: streamingId,
+            role: "assistant",
+            parts: [],
+          },
+        ]);
 
-	useEffect(() => {
-		const msgs = getCurrentConversation()
-		if (msgs && msgs.length > 0) {
-			setMessages(msgs)
-		} else if (!currentChatId) {
-			setMessages([])
-		}
-		setInput("")
-	}, [currentChatId])
+        const res = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+          signal,
+        });
 
-	useEffect(() => {
-		const activeId = currentChatId ?? id
-		if (activeId && messages.length > 0) {
-			setConversation(activeId, messages)
-		}
-	}, [messages, currentChatId, id])
+        if (!res.ok || !res.body) {
+          throw new Error(`Tool follow-up failed: ${res.status}`);
+        }
 
-	const { complete } = useCompletion({
-		api: `http://localhost:4000/chat/title`,
-		credentials: "include",
-		onFinish: (_, completion) => {
-			const activeId = activeChatIdRef.current
-			if (!completion || !activeId) return
-			setConversationTitle(activeId, completion.trim())
-		},
-	})
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let textStarted = false;
 
-	// Update graph highlights from the most recent tool-searchMemories output
-	useEffect(() => {
-		try {
-			const lastAssistant = [...messages]
-				.reverse()
-				.find((m) => m.role === "assistant")
-			if (!lastAssistant) return
-			const lastSearchPart = [...(lastAssistant.parts as any[])]
-				.reverse()
-				.find(
-					(p) =>
-						p?.type === "tool-searchMemories" &&
-						p?.state === "output-available",
-				)
-			if (!lastSearchPart) return
-			const output = (lastSearchPart as any).output
-			const ids = Array.isArray(output?.results)
-				? ((output.results as any[])
-					.map((r) => r?.documentId)
-					.filter(Boolean) as string[])
-				: []
-			if (ids.length > 0) {
-				setDocumentIds(ids)
-			}
-		} catch { }
-	}, [messages])
+        const flushEvents = (chunk: string) => {
+          buffer += chunk;
+          let idx: number;
+          while ((idx = buffer.indexOf("\n\n")) !== -1) {
+            const raw = buffer.slice(0, idx).trim();
+            buffer = buffer.slice(idx + 2);
+            if (!raw) continue;
+            const lines = raw.split("\n");
+            for (const line of lines) {
+              const prefix = "data: ";
+              if (!line.startsWith(prefix)) continue;
+              const data = line.slice(prefix.length).trim();
+              if (data === "[DONE]") {
+                return { done: true } as const;
+              }
+              try {
+                const evt = JSON.parse(data);
+                // Handle the minimal set of events we care about
+                switch (evt?.type) {
+                  case "text-start": {
+                    textStarted = true;
+                    // initialize a text part
+                    setMessages((prev: any[]) =>
+                      prev.map((m) =>
+                        m.id === streamingId
+                          ? {
+                              ...m,
+                              parts: [
+                                ...m.parts,
+                                { type: "text", id: evt.id ?? "0", text: "" },
+                              ],
+                            }
+                          : m
+                      )
+                    );
+                    break;
+                  }
+                  case "text-delta": {
+                    const delta = evt?.delta ?? "";
+                    if (!delta) break;
+                    setMessages((prev: any[]) =>
+                      prev.map((m) => {
+                        if (m.id !== streamingId) return m;
+                        const parts = [...m.parts];
+                        if (parts.length === 0) {
+                          parts.push({ type: "text", id: evt.id ?? "0", text: String(delta) });
+                        } else {
+                          const last = parts[parts.length - 1];
+                          if (last.type === "text") {
+                            last.text = (last.text ?? "") + String(delta);
+                          } else {
+                            parts.push({ type: "text", id: evt.id ?? "0", text: String(delta) });
+                          }
+                        }
+                        return { ...m, parts };
+                      })
+                    );
+                    break;
+                  }
+                  case "text-end": {
+                    // nothing special; the text is already accumulated
+                    break;
+                  }
+                  case "finish": {
+                    return { done: true } as const;
+                  }
+                  default:
+                    break;
+                }
+              } catch (e) {
+                // ignore malformed events
+              }
+            }
+          }
+          return { done: false } as const;
+        };
 
-	useEffect(() => {
-		const currentSummary = getCurrentChat()
-		const hasTitle = Boolean(
-			currentSummary?.title && currentSummary.title.trim().length > 0,
-		)
-		shouldGenerateTitleRef.current = !hasTitle
-	}, [])
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const str = decoder.decode(value, { stream: true });
+          const { done: finished } = flushEvents(str);
+          if (finished) break;
+        }
 
-	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault()
-			sendMessage({ text: input })
-			setInput("")
-		}
-	}
+        // finalize text part with state done
+        if (textStarted) {
+          setMessages((prev: any[]) =>
+            prev.map((m) =>
+              m.id === streamingId
+                ? {
+                    ...m,
+                    parts: m.parts.map((p: any) =>
+                      p?.type === "text" && p?.state !== "done"
+                        ? { ...p, state: "done" }
+                        : p
+                    ),
+                  }
+                : m
+            )
+          );
+        }
+      } catch (e) {
+        console.error("Failed to submit tool result:", e);
+      } finally {
+        isSubmittingToolRef.current = false;
+      }
+    };
 
-	const {
-		scrollContainerRef,
-		bottomRef,
-		isFarFromBottom,
-		onScroll,
-		enableAutoScroll,
-		scrollToBottom,
-	} = useStickyAutoScroll([messages, status])
+    // Fire and forget
+    submit();
+  }, [messages, selectedProject, selectedModel, setMessages]);
 
-	return (
-		<div className="h-full flex flex-col w-full">
-			<div className="flex-1 relative">
-				<div
-					className="flex flex-col gap-2 absolute inset-0 overflow-y-auto px-4 pt-4 pb-7 scroll-pb-7 custom-scrollbar"
-					onScroll={onScroll}
-					ref={scrollContainerRef}
-				>
-					{messages.map((message) => (
-						<div
-							className={cn(
-								"flex my-2",
-								message.role === "user"
-									? "items-center flex-row-reverse gap-2"
-									: "flex-col",
-							)}
-							key={message.id}
-						>
-							<div
-								className={cn(
-									"flex flex-col gap-2 max-w-4/5",
-									message.role === "user"
-										? "bg-accent/50 px-3 py-1.5 border border-border rounded-lg"
-										: "",
-								)}
-							>
-								{message.parts
-									.filter((part) =>
-										["text", "tool-searchMemories", "tool-addMemory"].includes(
-											part.type,
-										),
-									)
-									.map((part, index) => {
-										switch (part.type) {
-											case "text":
-												return (
-													<div key={`${message.id}-${part.type}-${index}`}>
-														<Streamdown>{part.text}</Streamdown>
-													</div>
-												)
-											case "tool-searchMemories": {
-												switch (part.state) {
-													case "input-available":
-													case "input-streaming":
-														return (
-															<div
-																className="text-sm flex items-center gap-2 text-muted-foreground"
-																key={`${message.id}-${part.type}-${index}`}
-															>
-																<Spinner className="size-4" /> Searching
-																memories...
-															</div>
-														)
-													case "output-error":
-														return (
-															<div
-																className="text-sm flex items-center gap-2 text-muted-foreground"
-																key={`${message.id}-${part.type}-${index}`}
-															>
-																<X className="size-4" /> Error recalling
-																memories
-															</div>
-														)
-													case "output-available": {
-														const output = part.output
-														const foundCount =
-															typeof output === "object" &&
-																output !== null &&
-																"count" in output
-																? Number(output.count) || 0
-																: 0
-														// @ts-expect-error
-														const results = Array.isArray(output?.results)
-															? // @ts-expect-error
-															output.results
-															: []
+  useEffect(() => {
+    // Ensure store chat id matches the route param on mount/navigation
+    if (routeChatId && routeChatId !== currentChatId) {
+      setCurrentChatId(routeChatId);
+    }
+  }, [routeChatId]);
 
-														return (
-															<ExpandableMemories
-																foundCount={foundCount}
-																key={`${message.id}-${part.type}-${index}`}
-																results={results}
-															/>
-														)
-													}
-													default:
-														return null
-												}
-											}
-											case "tool-addMemory": {
-												switch (part.state) {
-													case "input-available":
-														return (
-															<div
-																className="text-sm flex items-center gap-2 text-muted-foreground"
-																key={`${message.id}-${part.type}-${index}`}
-															>
-																<Spinner className="size-4" /> Adding memory...
-															</div>
-														)
-													case "output-error":
-														return (
-															<div
-																className="text-sm flex items-center gap-2 text-muted-foreground"
-																key={`${message.id}-${part.type}-${index}`}
-															>
-																<X className="size-4" /> Error adding memory
-															</div>
-														)
-													case "output-available":
-														return (
-															<div
-																className="text-sm flex items-center gap-2 text-muted-foreground"
-																key={`${message.id}-${part.type}-${index}`}
-															>
-																<Check className="size-4" /> Memory added
-															</div>
-														)
-													case "input-streaming":
-														return (
-															<div
-																className="text-sm flex items-center gap-2 text-muted-foreground"
-																key={`${message.id}-${part.type}-${index}`}
-															>
-																<Spinner className="size-4" /> Adding memory...
-															</div>
-														)
-													default:
-														return null
-												}
-											}
-											default:
-												return null
-										}
-									})}
-							</div>
-							{message.role === "assistant" && (
-								<div className="flex items-center gap-0.5 mt-0.5">
-									<Button
-										className="size-7 text-muted-foreground hover:text-foreground"
-										onClick={() => {
-											navigator.clipboard.writeText(
-												message.parts
-													.filter((p) => p.type === "text")
-													?.map((p) => (p as any).text)
-													.join("\n") ?? "",
-											)
-											toast.success("Copied to clipboard")
-										}}
-										size="icon"
-										variant="ghost"
-									>
-										<Copy className="size-3.5" />
-									</Button>
-									<Button
-										className="size-6 text-muted-foreground hover:text-foreground"
-										onClick={() => regenerate({ messageId: message.id })}
-										size="icon"
-										variant="ghost"
-									>
-										<RotateCcw className="size-3.5" />
-									</Button>
-								</div>
-							)}
-						</div>
-					))}
-					{status === "submitted" && (
-						<div className="flex text-muted-foreground justify-start gap-2 px-4 py-3 items-center w-full">
-							<Spinner className="size-4" />
-							<TextShimmer className="text-sm" duration={1.5}>
-								Thinking...
-							</TextShimmer>
-						</div>
-					)}
-					<div ref={bottomRef} />
-				</div>
+  useEffect(() => {
+    activeChatIdRef.current = currentChatId ?? id ?? null;
+  }, [currentChatId, id]);
 
-				<Button
-					className={cn(
-						"rounded-full w-fit mx-auto shadow-md z-10 absolute inset-x-0 bottom-4 flex justify-center",
-						"transition-all duration-200 ease-out",
-						isFarFromBottom
-							? "opacity-100 scale-100 pointer-events-auto"
-							: "opacity-0 scale-95 pointer-events-none",
-					)}
-					onClick={() => {
-						enableAutoScroll()
-						scrollToBottom("smooth")
-					}}
-					size="sm"
-					type="button"
-					variant="default"
-				>
-					Scroll to bottom
-				</Button>
-			</div>
+  useEffect(() => {
+    if (currentChatId) {
+      const savedModel = sessionStorage.getItem(storageKey) as
+        | "gpt-5"
+        | "claude-sonnet-4.5"
+        | "gemini-2.5-pro";
 
-			<div className="px-4 pb-4 pt-1 relative flex-shrink-0">
-				<form
-					className="flex flex-col items-end gap-3 bg-card border border-border rounded-[22px] p-3 relative shadow-lg dark:shadow-2xl"
-					onSubmit={(e) => {
-						e.preventDefault()
-						if (status === "submitted") return
-						if (status === "streaming") {
-							stop()
-							return
-						}
-						if (input.trim()) {
-							enableAutoScroll()
-							scrollToBottom("auto")
-							sendMessage({ text: input })
-							setInput("")
-						}
-					}}
-				>
-					<textarea
-						value={input}
-						onChange={(e) => setInput(e.target.value)}
-						onKeyDown={handleKeyDown}
-						placeholder="Ask your follow-up question..."
-						className="w-full text-foreground placeholder:text-muted-foreground rounded-md outline-none resize-none text-base leading-relaxed px-3 py-3 bg-transparent"
-						rows={3}
-					/>
-					<div className="absolute bottom-2 right-2">
-						<Button
-							type="submit"
-							disabled={!input.trim()}
-							className="text-primary-foreground rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary/90"
-							size="icon"
-						>
-							<ArrowUp className="size-4" />
-						</Button>
-					</div>
-				</form>
-			</div>
-		</div>
-	)
+      if (
+        savedModel &&
+        ["gpt-5", "claude-sonnet-4.5", "gemini-2.5-pro"].includes(savedModel)
+      ) {
+        setSelectedModel(savedModel);
+      }
+    }
+  }, [currentChatId]);
+
+  useEffect(() => {
+    if (currentChatId && !hasRunInitialMessageRef.current) {
+      // Check if there's an initial message from the home page in sessionStorage
+      const storageKey = `chat-initial-${currentChatId}`;
+      const initialMessage = sessionStorage.getItem(storageKey);
+
+      if (initialMessage) {
+        // Clean up the storage and send the message
+        sessionStorage.removeItem(storageKey);
+        sendMessage({ text: initialMessage });
+        hasRunInitialMessageRef.current = true;
+      }
+    }
+  }, [currentChatId]);
+
+  useEffect(() => {
+    if (id && id !== currentChatId) {
+      setCurrentChatId(id);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const msgs = getCurrentConversation();
+    if (msgs && msgs.length > 0) {
+      setMessages(msgs);
+    } else if (!currentChatId) {
+      setMessages([]);
+    }
+    setInput("");
+  }, [currentChatId]);
+
+  useEffect(() => {
+    const activeId = currentChatId ?? id;
+    if (activeId && messages.length > 0) {
+      setConversation(activeId, messages);
+    }
+  }, [messages, currentChatId, id]);
+
+  const { complete } = useCompletion({
+    api: `${import.meta.env.VITE_PUBLIC_BACKEND_URL}/chat/title`,
+    credentials: "include",
+    onFinish: (_, completion) => {
+      const activeId = activeChatIdRef.current;
+      if (!completion || !activeId) return;
+      setConversationTitle(activeId, completion.trim());
+    },
+  });
+
+  // Update graph highlights from the most recent tool-searchMemories output
+  useEffect(() => {
+    try {
+      const lastAssistant = [...messages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      if (!lastAssistant) return;
+      const lastSearchPart = [...(lastAssistant.parts as any[])]
+        .reverse()
+        .find(
+          (p) =>
+            p?.type === "tool-searchMemories" && p?.state === "output-available"
+        );
+      if (!lastSearchPart) return;
+      const output = (lastSearchPart as any).output;
+      const ids = Array.isArray(output?.results)
+        ? ((output.results as any[])
+            .map((r) => r?.documentId)
+            .filter(Boolean) as string[])
+        : [];
+      if (ids.length > 0) {
+        setDocumentIds(ids);
+      }
+    } catch {}
+  }, [messages]);
+
+  useEffect(() => {
+    const currentSummary = getCurrentChat();
+    const hasTitle = Boolean(
+      currentSummary?.title && currentSummary.title.trim().length > 0
+    );
+    shouldGenerateTitleRef.current = !hasTitle;
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage({ text: input });
+      setInput("");
+    }
+  };
+
+  const {
+    scrollContainerRef,
+    bottomRef,
+    isFarFromBottom,
+    onScroll,
+    enableAutoScroll,
+    scrollToBottom,
+  } = useStickyAutoScroll([messages, status]);
+
+  return (
+    <div className="min-h-screen flex flex-col w-full">
+      <div className="flex-1 relative">
+        <div
+          className="flex flex-col gap-2 absolute inset-0 overflow-y-auto px-4 pt-4 pb-7 scroll-pb-7 custom-scrollbar"
+          onScroll={onScroll}
+          ref={scrollContainerRef}
+        >
+          {messages.map((message) => (
+            <div
+              className={cn(
+                "flex my-2",
+                message.role === "user"
+                  ? "items-center flex-row-reverse gap-2"
+                  : "flex-col"
+              )}
+              key={message.id}
+            >
+              <div
+                className={cn(
+                  "flex flex-col gap-2 max-w-[80%] text-slate-200",
+                  message.role === "user"
+                    ? "bg-accent/50 px-3 py-1.5 border border-border rounded-lg"
+                    : ""
+                )}
+              >
+                {message.parts
+                  .filter((part) => {
+                    if (part.type === "text") return true;
+                    // Render any tool parts
+                    if (typeof part.type === "string" && part.type.startsWith("tool-")) return true;
+                    return false;
+                  })
+                  .map((part, index) => {
+                    switch (part.type) {
+                      case "text":
+                        return (
+                          <div key={`${message.id}-${part.type}-${index}`}>
+                            <Streamdown>{part.text}</Streamdown>
+                          </div>
+                        );
+                      case "tool-searchMemories":
+                      case "tool-search_memories": {
+                        switch (part.state) {
+                          case "input-available":
+                          case "input-streaming":
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Searching
+                                memories...
+                              </div>
+                            );
+                          case "output-error":
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error recalling
+                                memories
+                              </div>
+                            );
+                          case "output-available": {
+                            const output = part.output;
+                            const foundCount =
+                              typeof output === "object" &&
+                              output !== null &&
+                              "count" in output
+                                ? Number(output.count) || 0
+                                : 0;
+                            // @ts-expect-error
+                            const results = Array.isArray(output?.results)
+                              ? // @ts-expect-error
+                                output.results
+                              : [];
+
+                            return (
+                              <ExpandableMemories
+                                foundCount={foundCount}
+                                key={`${message.id}-${part.type}-${index}`}
+                                results={results}
+                              />
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case "tool-addMemory":
+                      case "tool-add_memory": {
+                        switch (part.state) {
+                          case "input-available":
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Adding memory...
+                              </div>
+                            );
+                          case "output-error":
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error adding memory
+                              </div>
+                            );
+                          case "output-available":
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Check className="size-4" /> Memory added
+                              </div>
+                            );
+                          case "input-streaming":
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Adding memory...
+                              </div>
+                            );
+                          default:
+                            return null;
+                        }
+                      }
+                      default:
+                        return null;
+                    }
+                  })}
+              </div>
+              {message.role === "assistant" && (
+                <div className="flex items-center gap-0.5 mt-0.5">
+                  <Button
+                    className="size-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        message.parts
+                          .filter((p) => p.type === "text")
+                          ?.map((p) => (p as any).text)
+                          .join("\n") ?? ""
+                      );
+                      toast.success("Copied to clipboard");
+                    }}
+                    size="icon"
+                    variant="ghost"
+                  >
+                    <Copy className="size-3.5 text-slate-200" />
+                  </Button>
+                  <Button
+                    className="size-6 text-muted-foreground hover:text-foreground"
+                    onClick={() => regenerate({ messageId: message.id })}
+                    size="icon"
+                    variant="ghost"
+                  >
+                    <RotateCcw className="size-3.5 text-slate-200" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+          {status === "submitted" && (
+            <div className="flex text-muted-foreground justify-start gap-2 px-4 py-3 items-center w-full">
+              <Spinner className="size-4" />
+              <TextShimmer className="text-sm" duration={1.5}>
+                Thinking...
+              </TextShimmer>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        <Button
+          className={cn(
+            "rounded-full w-fit mx-auto shadow-md z-10 absolute inset-x-0 bottom-4 flex justify-center",
+            "transition-all duration-200 ease-out",
+            isFarFromBottom
+              ? "opacity-100 scale-100 pointer-events-auto"
+              : "opacity-0 scale-95 pointer-events-none"
+          )}
+          onClick={() => {
+            enableAutoScroll();
+            scrollToBottom("smooth");
+          }}
+          size="sm"
+          type="button"
+          variant="default"
+        >
+          Scroll to bottom
+        </Button>
+      </div>
+
+      <div className="px-4 pb-4 pt-1 relative flex-shrink-0">
+        <form
+          className="flex flex-col items-end gap-3 bg-card border border-border rounded-[22px] p-3 relative shadow-lg dark:shadow-2xl"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (status === "submitted") return;
+            if (status === "streaming") {
+              stop();
+              return;
+            }
+            if (input.trim()) {
+              enableAutoScroll();
+              scrollToBottom("auto");
+              sendMessage({ text: input });
+              setInput("");
+            }
+          }}
+        >
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask your follow-up question..."
+            className="w-full text-slate-200 placeholder:text-muted-foreground rounded-md outline-none resize-none text-base leading-relaxed px-3 py-3 bg-transparent"
+            rows={3}
+          />
+          <div className="absolute bottom-2 right-2">
+            <Button
+              type="submit"
+              disabled={!input.trim()}
+              className="text-primary-foreground rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary/90"
+              size="icon"
+            >
+              <ArrowUp className="size-4" />
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }

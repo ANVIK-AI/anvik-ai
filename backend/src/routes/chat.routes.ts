@@ -1,10 +1,13 @@
 import { Router } from "express";
-import { chatRequest, chatTitleRequest } from "../controller/chat.controller";
+import { chatRequest, chatTitleRequest,chatRequestWithID } from "../controller/chat.controller";
 import prisma from "../db/prismaClient";
 
 const router = Router();
 
 router.post("/chat", chatRequest);
+
+router.post("/chat/:id", chatRequestWithID);
+
 
 router.post("/chat/title", chatTitleRequest); 
 

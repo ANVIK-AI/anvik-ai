@@ -1,24 +1,42 @@
 import type { Request, Response } from "express";
-import { streamText, tool } from 'ai';
-import { google } from '@ai-sdk/google';
+import { streamText, tool } from "ai";
+import { google } from "@ai-sdk/google";
 import prisma from "../db/prismaClient";
 import { z } from "zod";
 import { MemoryService } from "../services/chat.service";
+import { pipeUIMessageStreamToResponse,convertToModelMessages } from 'ai';
 
 const chatRequestSchema = z.object({
   messages: z.array(z.any()),
   metadata: z.object({
     projectId: z.string(),
-    model: z.string().optional()
-  })
+    model: z.string().optional(),
+  }),
 });
 
 const titleRequestSchema = z.object({
-  prompt: z.string()
+  prompt: z.string(),
 });
 
 const memoryService = new MemoryService();
 
+interface MemoryResult {
+  documentId?: string;
+  title?: string;
+  content?: string;
+  url?: string;
+  score?: number;
+}
+
+interface SearchMemoriesOutput {
+  count: number;
+  results: MemoryResult[];
+}
+
+interface AddMemoryOutput {
+  success: boolean;
+  memoryId?: string;
+}
 
 // export async function chatRequest(req: Request, res: Response) {
 //   try {
@@ -88,7 +106,7 @@ const memoryService = new MemoryService();
 //     };
 
 //     const result = await streamText({
-//       model: google('gemini-2.5-flash'),
+//       model: google('gemini-2.5-pro'),
 //       messages,
 //       tools: tools,
 //       maxSteps: 5,
@@ -130,7 +148,7 @@ const memoryService = new MemoryService();
 //     for await (const part of result.fullStream) {
 //       switch (part.type) {
 //         case 'text-delta': {
-//           const chunk = part.text; 
+//           const chunk = part.text;
 //           if (chunk && chunk.length > 0) {
 //             anyTextSent = true;
 //             accumulated += chunk;
@@ -249,37 +267,49 @@ export async function chatRequest(req: Request, res: Response) {
 
     // Verify the project/space exists
     const space = await prisma.space.findUnique({
-      where: { id: projectId }
+      where: { id: projectId },
     });
 
     if (!space) {
-      return res.status(404).json({ error: 'Project not found' });
+      return res.status(404).json({ error: "Project not found" });
     }
 
     const tools = {
       search_memories: tool({
-        name: 'search_memories',
-        description: 'Search user memories and patterns. Run when explicitly asked or when context about user\'s past choices would be helpful. Uses semantic matching to find relevant details across related experiences.',
+        name: "search_memories",
+        description:
+          "Search user memories and patterns. Run when explicitly asked or when context about user's past choices would be helpful. Uses semantic matching to find relevant details across related experiences.",
         inputSchema: z.object({
-          informationToGet: z.string().describe('The information to search for in the user\'s memories.')
+          informationToGet: z
+            .string()
+            .describe("The information to search for in the user's memories."),
         }),
         execute: async ({ informationToGet }: { informationToGet: string }) => {
-          console.log(`[Memory Search] Query: ${informationToGet}, Project: ${projectId}`);
-          const response = await memoryService.searchMemories(informationToGet, projectId);
+          console.log(
+            `[Memory Search] Query: ${informationToGet}, Project: ${projectId}`
+          );
+          const response = await memoryService.searchMemories(
+            informationToGet,
+            projectId
+          );
 
           // Process and format the memories
-          if (!response.success || !response.results || response.results.length === 0) {
-            return { memories: [], note: 'No relevant memories found.' };
+          if (
+            !response.success ||
+            !response.results ||
+            response.results.length === 0
+          ) {
+            return { memories: [], note: "No relevant memories found." };
           }
           // Take top 3 most relevant memories
-          const topMemories = response.results.slice(0, 3).map(mem => ({
+          const topMemories = response.results.slice(0, 3).map((mem) => ({
             title: mem.title,
             content: mem.content,
-            relevance: Math.round((mem.score || 0) * 100)
+            relevance: Math.round((mem.score || 0) * 100),
           }));
 
           // console.log(`[Memory Search] Top Memories: ${JSON.stringify(topMemories)}`);
-          console.log('[Memory Search] Top Memories:');
+          console.log("[Memory Search] Top Memories:");
           topMemories.forEach((memory, index) => {
             console.log(`\n--- Memory ${index + 1} ---`);
             console.log(`Title: ${memory.title}`);
@@ -288,45 +318,46 @@ export async function chatRequest(req: Request, res: Response) {
           });
 
           return { memories: topMemories };
-        }
+        },
       }),
 
       add_memory: tool({
-        name: 'add_memory',
-        description: 'Add a new memory to the user\'s memories. Run when explicitly asked or when the user mentions any information generalizable beyond the context of the current conversation.',
+        name: "add_memory",
+        description:
+          "Add a new memory to the user's memories. Run when explicitly asked or when the user mentions any information generalizable beyond the context of the current conversation.",
         inputSchema: z.object({
-          memory: z.string().describe('The memory to add.')
+          memory: z.string().describe("The memory to add."),
         }),
         execute: async ({ memory }: { memory: string }) => {
           console.log(`[Memory Add] Memory: ${memory}, Project: ${projectId}`);
           return await memoryService.addMemory(memory, projectId);
-        }
+        },
       }),
 
       fetch_memory: tool({
-        name: 'fetch_memory',
-        description: 'Fetch a specific memory by ID to get its full details.',
+        name: "fetch_memory",
+        description: "Fetch a specific memory by ID to get its full details.",
         inputSchema: z.object({
-          memoryId: z.string().describe('The ID of the memory to fetch.')
+          memoryId: z.string().describe("The ID of the memory to fetch."),
         }),
         execute: async ({ memoryId }: { memoryId: string }) => {
           console.log(`[Memory Fetch] ID: ${memoryId}, Project: ${projectId}`);
           return await memoryService.fetchMemory(memoryId, projectId);
-        }
+        },
       }),
     };
 
     // Set headers for streaming response
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Transfer-Encoding", "chunked");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
 
     const resAny = res as any;
-    if (typeof resAny.flushHeaders === 'function') {
+    if (typeof resAny.flushHeaders === "function") {
       resAny.flushHeaders();
     }
-    res.write('\n');
+    res.write("\n");
 
     // Manual multi-turn implementation for Gemini
     let conversationMessages = [...messages];
@@ -338,14 +369,14 @@ export async function chatRequest(req: Request, res: Response) {
       iterationCount++;
       console.log(`[Iteration ${iterationCount}] Starting generation`);
 
-      const now = new Date().toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        dateStyle: 'full',
-        timeStyle: 'medium'
+      const now = new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        dateStyle: "full",
+        timeStyle: "medium",
       });
 
       const result = await streamText({
-        model: google('gemini-2.5-flash'),
+        model: google("gemini-2.5-pro"),
         messages: conversationMessages,
         tools: tools,
         system: `You are a helpful assistant with access to the user's personal memories.
@@ -363,33 +394,35 @@ export async function chatRequest(req: Request, res: Response) {
         2. Do NOT just list the memories or output the raw JSON.
         3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "your favorite sport is football.").
         4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that."
-        `
+        `,
       });
 
-      let assistantText = '';
+      let assistantText = "";
       let hasToolCalls = false;
 
       // Stream the text and collect tool calls
       for await (const part of result.fullStream) {
-        if (part.type === 'text-delta') {
+        if (part.type === "text-delta") {
           const chunk = part.text;
           if (chunk && chunk.length > 0) {
             assistantText += chunk;
             res.write(chunk);
           }
-        } else if (part.type === 'tool-call') {
+        } else if (part.type === "tool-call") {
           hasToolCalls = true;
           console.log(`[Tool Call] ${part.toolName}`);
-        } else if (part.type === 'tool-result') {
+        } else if (part.type === "tool-result") {
           console.log(`[Tool Result] ${part.toolName}`);
-        } else if (part.type === 'finish') {
+        } else if (part.type === "finish") {
           console.log(`[Finish] Reason: ${part.finishReason}`);
         }
       }
 
       // After streaming completes, check if we need to continue
       if (hasToolCalls) {
-        console.log(`[Iteration ${iterationCount}] Tool calls detected, getting response parts`);
+        console.log(
+          `[Iteration ${iterationCount}] Tool calls detected, getting response parts`
+        );
 
         try {
           // Wait for the result to complete and get the raw response
@@ -409,16 +442,21 @@ export async function chatRequest(req: Request, res: Response) {
 
           if (responseMessages.length > 0) {
             // Log first message structure
-            console.log(`[First Message]:`, JSON.stringify(responseMessages[0]).substring(0, 200));
+            console.log(
+              `[First Message]:`,
+              JSON.stringify(responseMessages[0]).substring(0, 200)
+            );
             conversationMessages.push(...responseMessages);
             continueLoop = true;
           } else {
-            console.log('[Warning] No response messages found, trying to extract from result');
+            console.log(
+              "[Warning] No response messages found, trying to extract from result"
+            );
             // As a fallback, manually construct the continuation
             continueLoop = false;
           }
         } catch (err) {
-          console.error('[Error] Getting response messages:', err);
+          console.error("[Error] Getting response messages:", err);
           continueLoop = false;
         }
       } else {
@@ -429,15 +467,15 @@ export async function chatRequest(req: Request, res: Response) {
     }
 
     if (iterationCount >= maxIterations) {
-      console.log('[Warning] Max iterations reached');
+      console.log("[Warning] Max iterations reached");
     }
 
     res.end();
   } catch (error) {
-    console.error('Chat error:', error);
+    console.error("Chat error:", error);
 
     if (res.headersSent) {
-      console.error('Error occurred after streaming started - ending response');
+      console.error("Error occurred after streaming started - ending response");
       if (!res.writableEnded) {
         res.end();
       }
@@ -446,15 +484,173 @@ export async function chatRequest(req: Request, res: Response) {
 
     if (error instanceof z.ZodError) {
       return res.status(400).json({
-        error: 'Invalid request format',
-        details: error.errors
+        error: "Invalid request format",
+        details: error.errors,
       });
     }
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: "Internal server error",
+      message: error instanceof Error ? error.message : "Unknown error",
     });
+  }
+}
+
+export async function chatRequestWithID(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { messages, metadata } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "Messages array is required" });
+    }
+
+    const { projectId, model = "gemini-2.5-flash" } = metadata || {};
+
+    if (!projectId) {
+      return res
+        .status(400)
+        .json({ error: "projectId is required in metadata" });
+    }
+
+    const memoryService = new MemoryService();
+
+    console.log(" messages:", JSON.stringify(messages, null, 2));
+
+    const tools = {
+      search_memories: tool({
+        name: "search_memories",
+        description: "Search user memories and patterns.",
+        inputSchema: z.object({
+          informationToGet: z
+            .string()
+            .describe("The information to search for."),
+        }),
+        execute: async ({ informationToGet }: { informationToGet: string }) => {
+          console.log(
+            `[Memory Search] Query: ${informationToGet}, Project: ${projectId}`
+          );
+          //TODO: we need to pass the users projectId here from the frontend later
+          const response = await memoryService.searchMemories(
+            informationToGet,
+            projectId
+          );
+
+          if (
+            !response.success ||
+            !response.results ||
+            response.results.length === 0
+          ) {
+            return {
+              count: 0,
+              results: [],
+              note: "No relevant memories found.",
+            };
+          }
+
+          const topMemories = response.results.slice(0, 3).map((mem) => ({
+            documentId: mem.documentId,
+            title: mem.title,
+            content: mem.content,
+            url: mem.url,
+            score: mem.score,
+          }));
+
+          console.log(
+            `[Memory Search] Top Memories: ${JSON.stringify(topMemories)}`
+          );
+
+          return {
+            count: topMemories.length,
+            results: topMemories,
+          };
+        },
+      }),
+
+      add_memory: tool({
+        name: "add_memory",
+        description: "Add a new memory to the user's memories.",
+        inputSchema: z.object({
+          memory: z.string().describe("The memory to add."),
+        }),
+        execute: async ({ memory }: { memory: string }) => {
+
+          //TODO: we need to pass the users projectId here from the frontend later
+          console.log(`[Memory Add] Memory: ${memory}, Project: ${projectId}`);
+          const result = await memoryService.addMemory(memory, projectId);
+
+          return {
+            success: result.success,
+            memoryId: result.memory?.id,
+            status: result.memory?.status,
+          };
+        },
+      }),
+
+      fetch_memory: tool({
+        name: "fetch_memory",
+        description: "Fetch a specific memory by ID.",
+        inputSchema: z.object({
+          memoryId: z.string().describe("The ID of the memory to fetch."),
+        }),
+        execute: async ({ memoryId }: { memoryId: string }) => {
+          console.log(`[Memory Fetch] ID: ${memoryId}, Project: ${projectId}`);
+          return await memoryService.fetchMemory(memoryId, projectId);
+        },
+      }),
+    };
+
+    const now = new Date().toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      dateStyle: "full",
+      timeStyle: "medium",
+    });
+    // const modelMessages = convertUIToModelMessages(messages);
+    // console.log("Converted messages:", JSON.stringify(modelMessages, null, 2));
+
+    const convertToModel=convertToModelMessages(messages);
+    console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
+
+    const result = await streamText({
+      model: google("gemini-2.5-flash"),
+      messages: convertToModel,
+      tools: tools,
+      maxSteps: 5, // allow the model to call tools and then produce a concluding assistant message
+      system: `You are a helpful assistant with access to the user's personal memories.
+
+        [Current Date & Time]: ${now}
+
+        When answering questions:
+
+        For general knowledge questions, use your own knowledge directly
+        Use search/add memory tools when the question relates to the user's personal information, preferences, or past experiences
+        Always provide a helpful response even if no relevant memories are found
+
+        [IMPORTANT] How to use 'search_memories' tool results:
+        1. After you get a JSON object from the 'search_memories' tool (e.g., { memories: [...] }), you MUST synthesize that information into a natural, conversational answer.
+        2. Do NOT just list the memories or output the raw JSON.
+        3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "your favorite sport is football.").
+        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that."
+        `,
+    });
+
+    result.pipeUIMessageStreamToResponse(res);
+  } catch (error) {
+    console.log("Chat request error:", error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: "Invalid request format",
+        details: error.errors,
+      });
+    }
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 }
 
@@ -462,25 +658,27 @@ export async function chatTitleRequest(req: Request, res: Response) {
   try {
     const { prompt } = titleRequestSchema.parse(req.body);
 
-    console.log(`[Title Generation] Generating title for: "${prompt.substring(0, 100)}..."`);
+    console.log(
+      `[Title Generation] Generating title for: "${prompt.substring(0, 100)}..."`
+    );
 
     const result = streamText({
-      model: google('gemini-2.5-flash'),
+      model: google("gemini-2.5-flash"),
       system: `Generate a very short title (2-5 words) that summarizes the following conversation starter. 
         Return only the title, no other text. Make it concise and descriptive.`,
       messages: [
         {
-          role: 'user',
-          content: `Generate a title for this conversation: ${prompt}`
-        }
+          role: "user",
+          content: `Generate a title for this conversation: ${prompt}`,
+        },
       ],
       maxOutputTokens: 20,
     });
 
     // Set headers for streaming response
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Transfer-Encoding", "chunked");
+    res.setHeader("Cache-Control", "no-cache");
 
     // Stream the title
     for await (const chunk of result.textStream) {
@@ -489,18 +687,107 @@ export async function chatTitleRequest(req: Request, res: Response) {
 
     res.end();
   } catch (error) {
-    console.error('Title generation error:', error);
+    console.error("Title generation error:", error);
 
     if (error instanceof z.ZodError) {
       return res.status(400).json({
-        error: 'Invalid request format',
-        details: error.errors
+        error: "Invalid request format",
+        details: error.errors,
       });
     }
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: "Internal server error",
+      message: error instanceof Error ? error.message : "Unknown error",
     });
   }
+}
+
+/* Helper functions */
+
+function convertMessages(frontendMessages: any[]) {
+  return frontendMessages
+    .map((message) => {
+      const baseMessage = {
+        role: message.role,
+        content: "",
+      };
+
+      // Handle different message types
+      switch (message.role) {
+        case "user":
+          if (message.parts && Array.isArray(message.parts)) {
+            const textContent = message.parts
+              .filter((part: any) => part.type === "text")
+              .map((part: any) => part.text)
+              .join("\n");
+            return { ...baseMessage, content: textContent };
+          }
+          return baseMessage;
+
+        case "assistant":
+          if (message.parts && Array.isArray(message.parts)) {
+            const textContent = message.parts
+              .filter((part: any) => part.type === "text")
+              .map((part: any) => part.text)
+              .join("\n");
+
+            const toolCalls = message.parts
+              .filter((part: any) => part.type === "tool-call")
+              .map((part: any) => ({
+                toolCallId: part.toolCallId,
+                toolName: part.toolName,
+                args: part.args,
+              }));
+
+            if (toolCalls.length > 0) {
+              return {
+                ...baseMessage,
+                content: textContent,
+                toolCalls,
+              };
+            }
+            return { ...baseMessage, content: textContent };
+          }
+          return baseMessage;
+
+        case "tool":
+          if (message.parts && Array.isArray(message.parts)) {
+            const textContent = message.parts
+              .filter((part: any) => part.type === "text")
+              .map((part: any) => part.text)
+              .join("\n");
+
+            return {
+              ...baseMessage,
+              content: textContent,
+              toolCallId: message.toolCallId,
+            };
+          }
+          return baseMessage;
+
+        default:
+          return baseMessage;
+      }
+    })
+    .filter(
+      (msg) => msg.content !== "" || (msg.toolCalls && msg.toolCalls.length > 0)
+    );
+}
+
+function convertUIToModelMessages(
+  uiMessages: any[]
+): { role: string; content: string }[] {
+  return uiMessages.map((msg) => {
+    // Join all text parts into a single content string (ignore non-text parts if any)
+    const content = msg?.parts
+      ?.filter((part: any) => part.type === "text")
+      .map((part: any) => part.text)
+      .join(" ");
+
+    return {
+      role: msg.role,
+      content,
+    };
+  });
 }
