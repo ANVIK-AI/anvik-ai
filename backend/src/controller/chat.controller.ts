@@ -548,7 +548,55 @@ export async function chatRequestWithID(req: Request, res: Response) {
             };
           }
 
-          const topMemories = response.results.slice(0, 3).map((mem) => ({
+          // Dynamic memory count selection (min 2, max 10) based on score quality & distribution.
+          // Heuristic rationale:
+          // 1. Compute quality metric combining highest score, average of top 5, and overall average.
+          // 2. Map this quality to a base count using thresholds.
+          // 3. Adjust downward if there's an early steep drop (>45%) vs top score.
+          // 4. Adjust upward if many scores are tightly clustered near the top (within 0.05).
+          // This is intentionally conservative to avoid flooding the model with low‑value context.
+          const maxCandidates = Math.min(10, response.results.length);
+          const candidateResults = response.results.slice(0, maxCandidates);
+          const scores = candidateResults.map(r => typeof r.score === 'number' ? r.score! : 0);
+
+          const topScore = scores[0];
+          const avgTop5 = scores.slice(0, Math.min(5, scores.length)).reduce((a,b)=>a+b,0) / Math.min(5, scores.length);
+          const avgAll = scores.reduce((a,b)=>a+b,0) / scores.length;
+          const quality = (topScore + avgTop5 + avgAll) / 3; // blended quality metric
+
+          // Base count mapping by quality bands
+          const qualityBands: { threshold: number; count: number }[] = [
+            { threshold: 0.30, count: 2 },
+            { threshold: 0.45, count: 3 },
+            { threshold: 0.55, count: 4 },
+            { threshold: 0.65, count: 5 },
+            { threshold: 0.72, count: 6 },
+            { threshold: 0.80, count: 7 },
+            { threshold: 0.87, count: 8 },
+            { threshold: 0.93, count: 9 },
+            { threshold: 0.97, count: 10 },
+          ];
+          let baseCount = 2;
+          for (const band of qualityBands) {
+            if (quality >= band.threshold) baseCount = band.count; else break;
+          }
+
+          // Detect steep drop: first index after position 1 where score < 55% of top.
+          const dropIndex = scores.findIndex((s,i) => i > 1 && s < topScore * 0.55);
+          if (dropIndex !== -1) {
+            baseCount = Math.min(baseCount, Math.max(2, dropIndex));
+          }
+
+            // Dense cluster near top (within 0.05 of topScore)
+          const denseCluster = scores.filter(s => topScore - s <= 0.05).length;
+          if (denseCluster >= 4) {
+            baseCount = Math.max(baseCount, denseCluster); // ensure we include dense similar high scores
+          }
+
+          // Final clamp & ensure we don't exceed available results
+          const chosenCount = Math.min(Math.max(baseCount, 2), maxCandidates);
+
+          const dynamicMemories = candidateResults.slice(0, chosenCount).map(mem => ({
             documentId: mem.documentId,
             title: mem.title,
             content: mem.content,
@@ -557,12 +605,12 @@ export async function chatRequestWithID(req: Request, res: Response) {
           }));
 
           console.log(
-            `[Memory Search] Top Memories: ${JSON.stringify(topMemories)}`
+            `[Memory Search] Dynamic Selection => quality=${quality.toFixed(3)} topScore=${topScore.toFixed(3)} chosenCount=${chosenCount} scores=[${scores.map(s=>s.toFixed(2)).join(', ')}]`
           );
 
           return {
-            count: topMemories.length,
-            results: topMemories,
+            count: dynamicMemories.length,
+            results: dynamicMemories,
           };
         },
       }),
