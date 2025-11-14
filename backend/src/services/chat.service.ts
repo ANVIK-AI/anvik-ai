@@ -23,6 +23,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
 // Memory service using Prisma and MemoryEntry table
 export class MemoryService {
+    // --- Tunables ---
     private getTopK(): number {
         const raw = process.env.MEM_SEARCH_TOP_K;
         const val = raw ? Number(raw) : 10;
@@ -34,6 +35,19 @@ export class MemoryService {
         const val = raw ? Number(raw) : 0.2;
         if (!Number.isFinite(val)) return 0.2;
         return Math.max(0, Math.min(1, val));
+    }
+
+    private getUpdateMinSimilarity(): number {
+        const raw = process.env.MEM_UPDATE_MIN_SIMILARITY;
+        const val = raw ? Number(raw) : 0.75;
+        if (!Number.isFinite(val)) return 0.75;
+        return Math.max(0, Math.min(1, val));
+    }
+
+    private getUpdateMaxParents(): number {
+        const raw = process.env.MEM_UPDATE_MAX_PARENTS;
+        const val = raw ? Number(raw) : 1;
+        return Number.isFinite(val) && val >= 0 ? Math.min(val, 5) : 1;
     }
     // Generate embedding for text using Gemini
     private async generateEmbedding(text: string): Promise<number[]> {
@@ -204,68 +218,145 @@ export class MemoryService {
                 throw new Error(`Space with id ${projectId} not found`);
             }
 
-            // Generate embedding for the memory
+            // Generate embedding for the memory (for storage and similarity)
             const embedding = await this.generateEmbedding(memory);
             const embeddingStr = JSON.stringify(embedding);
 
-            // Create memory entry with embedding
-            const memoryEntry = await prisma.memoryEntry.create({
-                data: {
-                    memory,
+            // Find related existing memories (latest, same space) by cosine similarity
+            const candidateLatest = await prisma.memoryEntry.findMany({
+                where: {
                     spaceId: projectId,
-                    orgId: space.orgId,
-                    memoryEmbeddingNew: embeddingStr,
-                    memoryEmbeddingNewModel: 'text-embedding-004',
-                    metadata: {
-                        title: this.extractTitleFromMemory(memory),
-                        createdAt: new Date().toISOString(),
-                        type: 'user_memory',
-                        source: 'chat'
+                    isLatest: true,
+                    isForgotten: false,
+                    OR: [
+                        { memoryEmbeddingNew: { not: null } },
+                        { memoryEmbedding: { not: null } }
+                    ]
+                },
+                select: {
+                    id: true,
+                    memory: true,
+                    memoryEmbeddingNew: true,
+                    memoryEmbedding: true,
+                    version: true,
+                    parentMemoryId: true,
+                    rootMemoryId: true,
+                    createdAt: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 50,
+            });
+
+            const scored = candidateLatest
+                .map((m) => {
+                    const raw = m.memoryEmbeddingNew ?? m.memoryEmbedding;
+                    if (!raw) return null;
+                    try {
+                        const vec = JSON.parse(raw);
+                        if (!Array.isArray(vec) || vec.length !== embedding.length) return null;
+                        const score = this.calculateCosineSimilarity(embedding, vec);
+                        return { m, score };
+                    } catch {
+                        return null;
                     }
-                }
-            });
+                })
+                .filter((x): x is { m: typeof candidateLatest[number]; score: number } => !!x)
+                .sort((a, b) => b.score - a.score);
 
-            // Create a dedicated document for this memory and attach it to the current space
-            const memoryTitle = this.extractTitleFromMemory(memory);
-            const memoryDocument = await prisma.document.create({
-                data: {
-                    orgId: space.orgId,
-                    userId: 'system',
-                    title: memoryTitle,
-                    type: 'text',
-                    status: 'active',
-                    metadata: { source: 'chat', synthetic: true }
-                }
-            });
+            const minUpdateSim = this.getUpdateMinSimilarity();
+            const maxParents = this.getUpdateMaxParents();
+            const parents = scored.filter(s => s.score >= minUpdateSim).slice(0, maxParents);
 
-            // Link the document to this space so it appears under the correct project
-            await prisma.documentsToSpaces.create({
-                data: {
-                    documentId: memoryDocument.id,
-                    spaceId: projectId
-                }
-            });
+            // Prepare versioning fields if an update parent is found (pick best one)
+            const primaryParent = parents[0]?.m;
+            const version = primaryParent ? (primaryParent.version || 1) + 1 : 1;
+            const parentMemoryId = primaryParent ? primaryParent.id : null;
+            const rootMemoryId = primaryParent ? (primaryParent.rootMemoryId || primaryParent.id) : null;
 
-            // Link the new memory to the created document so it appears in the graph UI
-            await prisma.memoryDocumentSource.create({
-                data: {
-                    memoryEntryId: memoryEntry.id,
-                    documentId: memoryDocument.id,
-                    relevanceScore: 100,
-                    metadata: { linkedBy: 'chat.service.addMemory' }
+            // Memory relations: map parentId -> "updates"
+            const memoryRelations: Record<string, 'updates' | 'extends' | 'derives'> = {};
+            if (primaryParent) {
+                memoryRelations[primaryParent.id] = 'updates';
+            }
+
+            // Create all entities and links in a single transaction
+            const result = await prisma.$transaction(async (tx) => {
+                // If we have a parent, mark it as not-latest
+                if (primaryParent) {
+                    await tx.memoryEntry.update({
+                        where: { id: primaryParent.id },
+                        data: { isLatest: false }
+                    });
                 }
+
+                // Create the new memory entry (latest)
+                const memoryEntry = await tx.memoryEntry.create({
+                    data: {
+                        memory,
+                        spaceId: projectId,
+                        orgId: space.orgId,
+                        version,
+                        isLatest: true,
+                        parentMemoryId,
+                        rootMemoryId,
+                        memoryRelations: memoryRelations as any,
+                        memoryEmbeddingNew: embeddingStr,
+                        memoryEmbeddingNewModel: embeddingModelName(),
+                        metadata: {
+                            title: this.extractTitleFromMemory(memory),
+                            createdAt: new Date().toISOString(),
+                            type: 'user_memory',
+                            source: 'chat',
+                            updateFrom: primaryParent?.id ?? null,
+                        }
+                    }
+                });
+
+                // Create a dedicated document for this memory and attach it to the current space
+                const memoryTitle = this.extractTitleFromMemory(memory);
+                const memoryDocument = await tx.document.create({
+                    data: {
+                        orgId: space.orgId,
+                        userId: 'system',
+                        title: memoryTitle,
+                        type: 'text',
+                        status: 'active',
+                        metadata: { source: 'chat', synthetic: true }
+                    }
+                });
+
+                // Link the document to this space so it appears under the correct project
+                await tx.documentsToSpaces.create({
+                    data: {
+                        documentId: memoryDocument.id,
+                        spaceId: projectId
+                    }
+                });
+
+                // Link the new memory to the created document so it appears in the graph UI
+                await tx.memoryDocumentSource.create({
+                    data: {
+                        memoryEntryId: memoryEntry.id,
+                        documentId: memoryDocument.id,
+                        relevanceScore: 100,
+                        metadata: { linkedBy: 'chat.service.addMemory' }
+                    }
+                });
+
+                return { memoryEntry };
             });
 
             logger.info({
-                msg: 'Memory created',
+                msg: primaryParent ? 'Memory created (update)' : 'Memory created',
                 projectId,
-                memoryId: memoryEntry.id
+                memoryId: result.memoryEntry.id,
+                parentMemoryId: primaryParent?.id,
             });
             return {
                 success: true,
                 memory: {
-                    id: memoryEntry.id,
-                    status: 'created'
+                    id: result.memoryEntry.id,
+                    status: primaryParent ? 'created:update' : 'created'
                 }
             };
         } catch (error) {

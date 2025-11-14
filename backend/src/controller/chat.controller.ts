@@ -515,7 +515,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
     const memoryService = new MemoryService();
 
-    console.log(" messages:", JSON.stringify(messages, null, 2));
+    // console.log(" messages:", JSON.stringify(messages, null, 2));
 
     const tools = {
       search_memories: tool({
@@ -593,7 +593,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
         inputSchema: z.object({
           memoryId: z.string().describe("The ID of the memory to fetch."),
         }),
-        execute: async ({ memoryId }: { memoryId: string }) => {
+        execute: async ({ memoryId }: { memoryId: string }) => { 
           console.log(`[Memory Fetch] ID: ${memoryId}, Project: ${projectId}`);
           return await memoryService.fetchMemory(memoryId, projectId);
         },
@@ -609,7 +609,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
     // console.log("Converted messages:", JSON.stringify(modelMessages, null, 2));
 
     const convertToModel=convertToModelMessages(messages);
-    console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
+    // console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
 
     const result = await streamText({
       model: google("gemini-2.5-flash"),
