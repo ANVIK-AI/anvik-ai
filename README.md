@@ -8,3 +8,8 @@ open another terminal and run
 cd frontend/ && npm run dev
 ```
 Make sure to do npm install in both directories and also add .env files for both backend and frontend
+
+To access/see database through a prisma UI run:
+```bash
+cd backend/ && npx prisma studio
+```
