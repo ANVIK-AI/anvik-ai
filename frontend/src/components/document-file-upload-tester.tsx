@@ -75,7 +75,7 @@ export function DocumentFileUploadTester() {
           accept=".txt,.md,.pdf,.csv,.json,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
         />
         {file && (
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-300">
             Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
           </p>
         )}
@@ -87,7 +87,7 @@ export function DocumentFileUploadTester() {
           type="text"
           value={containerTags}
           onChange={(e) => setContainerTags(e.target.value)}
-          className="block w-full text-sm border rounded p-2"
+          className="block w-full text-sm border rounded p-2 text-gray-900"
           placeholder='["test_project"]'
         />
       </div>
@@ -95,7 +95,7 @@ export function DocumentFileUploadTester() {
       <button
         onClick={handleUpload}
         disabled={loading || !file}
-        className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+        className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400"
       >
         {loading ? 'Uploading...' : 'Upload File'}
       </button>

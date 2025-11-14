@@ -209,7 +209,7 @@ export function ChatMessages() {
   
   //TODO:use this method to set the project id to pass it to backend
   const { selectedProject,setSelectedProject } = useProject();
-  setSelectedProject("6a5bcd82-0d46-4956-a1e2-41c18bce25df")
+  setSelectedProject("570c0f97-1525-42f3-a5f0-14c76c8d3656")
   // const { selectedProject } = useProject(); 
   const { id: routeChatId } = useParams();
   const {
