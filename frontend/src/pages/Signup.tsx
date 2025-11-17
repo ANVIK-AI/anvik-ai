@@ -51,7 +51,7 @@ function Signup({ setIsAuthenticated }: any) {
           <div className="auth-pill-row">
             <span>Memory Graph</span>
             <span>Realtime Recall</span>
-            <span>Secure Sync</span>
+            <span>Agentic Orchestration</span>
           </div>
         </div>
 
@@ -67,7 +67,7 @@ function Signup({ setIsAuthenticated }: any) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="John Doe"
+              placeholder="Your full name"
               required
             />
           </div>

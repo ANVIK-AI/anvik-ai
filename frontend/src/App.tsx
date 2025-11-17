@@ -52,7 +52,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell h-screen flex flex-col">
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<PortfolioHome />} />

@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Docker",
+      "type": "shell",
+      "command": "cd backend && docker compose up -d"
+    },
+    {
+      "label": "Backend",
+      "type": "shell",
+      "command": "cd backend && npm run dev"
+    },
+    {
+      "label": "Frontend",
+      "type": "shell",
+      "command": "cd frontend && npm run dev"
+    },
+    {
+      "label": "Prisma Studio",
+      "type": "shell",
+      "command": "cd backend && npx prisma studio"
+    },
+
+    // -------- INITIAL SETUP --------
+    {
+      "label": "Install Backend Dependencies",
+      "type": "shell",
+      "command": "cd backend && npm install"
+    },
+    {
+      "label": "Install Frontend Dependencies",
+      "type": "shell",
+      "command": "cd frontend && npm install"
+    },
+    {
+      "label": "Prisma Generate",
+      "type": "shell",
+      "command": "cd backend && npx prisma generate"
+    },
+
+    // Combined initial setup task
+    {
+      "label": "Initial Setup",
+      "dependsOn": [
+        "Install Backend Dependencies",
+        "Install Frontend Dependencies",
+        "Prisma Generate"
+      ],
+      "dependsOrder": "sequence"
+    },
+
+    // -------- MAIN DEV ENVIRONMENT STARTER --------
+    {
+      "label": "Start Development Environment",
+      "dependsOn": [
+        "Start Docker",
+        "Backend",
+        "Frontend",
+        "Prisma Studio"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -84,7 +84,7 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
   }
 
   return (
-    <div className="flex items-center justify-between w-full p-3 md:p-4">
+    <div className="flex items-center justify-between w-full p-3 md:p-4 bg-gray-900 ">
       <div className="flex items-center gap-2 md:gap-3 justify-between w-full">
         <div className="flex items-center gap-1.5 md:gap-2">
           <a

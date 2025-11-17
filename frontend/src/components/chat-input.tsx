@@ -51,13 +51,13 @@ export function ChatInput() {
 		<div className="flex-1 flex items-center justify-center px-4">
 			<div className="w-full max-w-4xl">
 				<div className="text-start mb-4">
-					<h2 className="text-3xl font-bold text-foreground text-slate-200">
+					<h2 className="text-3xl font-bold text-foreground text-slate-900">
 						Welcome, <span className="text-primary">User</span>
 					</h2>
 				</div>
 				<div className="relative">
 					<form
-						className="flex flex-col items-end bg-card border border-border rounded-[14px] shadow-lg"
+						className="flex flex-col items-end bg-white border border-border border-slate-900 rounded-[14px] shadow-lg"
 						onSubmit={(e) => {
 							e.preventDefault()
 							if (!message.trim()) return
@@ -69,7 +69,7 @@ export function ChatInput() {
 							onChange={(e) => setMessage(e.target.value)}
 							onKeyDown={handleKeyDown}
 							placeholder="Ask your supermemory..."
-							className="w-full text-foreground placeholder-muted-foreground rounded-md outline-none resize-none text-base text-slate-200 leading-relaxed px-6 py-4 bg-transparent"
+							className="w-full text-foreground placeholder-slate-700 rounded-md outline-none resize-none text-base text-slate-900 leading-relaxed px-6 py-4 bg-transparent"
 							rows={2}
 						/>
 					</form>

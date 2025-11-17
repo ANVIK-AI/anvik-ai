@@ -63,11 +63,11 @@ export function DocumentFileUploadTester() {
   };
 
   return (
-    <div className="p-6 border rounded-lg space-y-4">
-      <h3 className="text-lg font-bold">File Upload Test (POST /v3/documents/file)</h3>
+    <div className="p-6 border rounded-lg space-y-4 bg-blue-50">
+      <h3 className="text-lg font-bold text-gray-900">File Upload Test (POST /v3/documents/file)</h3>
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium">Select File:</label>
+        <label className="block text-sm font-medium text-gray-900">Select File:</label>
         <input
           type="file"
           onChange={handleFileChange}
@@ -75,14 +75,14 @@ export function DocumentFileUploadTester() {
           accept=".txt,.md,.pdf,.csv,.json,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
         />
         {file && (
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-gray-900">
             Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
           </p>
         )}
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium">Container Tags (JSON array):</label>
+        <label className="block text-sm font-medium text-gray-900">Container Tags (JSON array):</label>
         <input
           type="text"
           value={containerTags}
@@ -95,7 +95,7 @@ export function DocumentFileUploadTester() {
       <button
         onClick={handleUpload}
         disabled={loading || !file}
-        className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400"
+        className="px-4 py-2 bg-blue-500 rounded disabled:bg-gray-400 text-gray-900"
       >
         {loading ? 'Uploading...' : 'Upload File'}
       </button>
@@ -113,9 +113,9 @@ export function DocumentFileUploadTester() {
         </div>
       )}
 
-      <div className="text-xs text-gray-500 space-y-1">
+      <div className="text-xs text-gray-900 space-y-1">
         <p><strong>Console logs will show:</strong></p>
-        <ul className="list-disc list-inside space-y-1">
+        <ul className="list-disc list-inside space-y-1 text-gray-900">
           <li>📤 Request details (file name, size, type)</li>
           <li>📥 Response status and timing</li>
           <li>✅ Success response or ❌ Error details</li>

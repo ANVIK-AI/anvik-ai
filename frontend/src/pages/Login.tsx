@@ -42,8 +42,8 @@ function Login({ setIsAuthenticated }: any) {
           <p>Sign in to orchestrate your AI personal agent.</p>
           <div className="auth-pill-row">
             <span>Agents</span>
-            <span>Connectors</span>
-            <span>Playbooks</span>
+            <span>Tools</span>
+            <span>Dedicated humanlike memory</span>
           </div>
         </div>
 

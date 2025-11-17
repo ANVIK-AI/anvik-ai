@@ -49,7 +49,7 @@ function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
   return (
     <div className="text-sm">
       <button
-        className="flex items-center gap-2 text-muted-foreground hover:text-slate-200 transition-colors"
+        className="flex items-center gap-2 text-muted-foreground transition-colors text-gray-900"
         onClick={() => setIsExpanded(!isExpanded)}
         type="button"
       >
@@ -70,9 +70,9 @@ function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
                 result.url.startsWith("https://"));
 
             const content = (
-              <>
+              <div className="text-gray-900">
                 {result.title && (
-                  <div className="font-medium text-sm mb-1 text-slate-200">
+                  <div className="font-medium text-sm mb-1">
                     {result.title}
                   </div>
                 )}
@@ -91,7 +91,7 @@ function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
                     Score: {(result.score * 100).toFixed(1)}%
                   </div>
                 )}
-              </>
+              </div>
             );
 
             if (isClickable) {
@@ -110,7 +110,7 @@ function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
 
             return (
               <div
-                className="p-2 bg-accent/50 rounded-md border border-border"
+                className="p-2 bg-accent/50 rounded-md border border-border bg-white"
                 key={result.documentId || index}
               >
                 {content}
@@ -614,7 +614,7 @@ export function ChatMessages() {
   } = useStickyAutoScroll([messages, status]);
 
   return (
-    <div className="min-h-screen flex flex-col w-full">
+    <div className="h-screen flex flex-col w-full">
       <div className="flex-1 relative">
         <div
           className="flex flex-col gap-2 absolute inset-0 overflow-y-auto px-4 pt-4 pb-7 scroll-pb-7 custom-scrollbar"
@@ -635,7 +635,7 @@ export function ChatMessages() {
                 className={cn(
                   "flex flex-col gap-2 max-w-[80%] text-slate-200",
                   message.role === "user"
-                    ? "bg-accent/50 px-3 py-1.5 border border-border rounded-lg"
+                    ? "bg-accent/50 px-3 py-1.5 border border-border rounded-lg text-gray-900 bg-white"
                     : ""
                 )}
               >
@@ -650,8 +650,8 @@ export function ChatMessages() {
                     switch (part.type) {
                       case "text":
                         return (
-                          <div key={`${message.id}-${part.type}-${index}`}>
-                            <Streamdown>{part.text}</Streamdown>
+                          <div className="bg-accent/50 p-2 rounded-lg text-gray-900 bg-white" key={`${message.id}-${part.type}-${index}`}>
+                            <Streamdown className="text-gray-900">{part.text}</Streamdown>
                           </div>
                         );
                       case "tool-searchMemories":
@@ -661,7 +661,7 @@ export function ChatMessages() {
                           case "input-streaming":
                             return (
                               <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
                                 key={`${message.id}-${part.type}-${index}`}
                               >
                                 <Spinner className="size-4" /> Searching
@@ -710,7 +710,7 @@ export function ChatMessages() {
                           case "input-available":
                             return (
                               <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
                                 key={`${message.id}-${part.type}-${index}`}
                               >
                                 <Spinner className="size-4" /> Adding memory...
@@ -719,7 +719,7 @@ export function ChatMessages() {
                           case "output-error":
                             return (
                               <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
                                 key={`${message.id}-${part.type}-${index}`}
                               >
                                 <X className="size-4" /> Error adding memory
@@ -728,10 +728,10 @@ export function ChatMessages() {
                           case "output-available":
                             return (
                               <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground"
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
                                 key={`${message.id}-${part.type}-${index}`}
                               >
-                                <Check className="size-4" /> Memory added
+                                <Check className="size-4 text-gray-900" /> Memory added
                               </div>
                             );
                           case "input-streaming":
@@ -740,7 +740,7 @@ export function ChatMessages() {
                                 className="text-sm flex items-center gap-2 text-muted-foreground"
                                 key={`${message.id}-${part.type}-${index}`}
                               >
-                                <Spinner className="size-4" /> Adding memory...
+                                <Spinner className="size-4 text-gray-900" /> Adding memory...
                               </div>
                             );
                           default:
@@ -763,12 +763,13 @@ export function ChatMessages() {
                           ?.map((p) => (p as any).text)
                           .join("\n") ?? ""
                       );
+                      console.log("Copied to clipboard");
                       toast.success("Copied to clipboard");
                     }}
                     size="icon"
                     variant="ghost"
                   >
-                    <Copy className="size-3.5 text-slate-200" />
+                    <Copy className="size-3.5 text-gray-900" />
                   </Button>
                   <Button
                     className="size-6 text-muted-foreground hover:text-foreground"
@@ -776,7 +777,7 @@ export function ChatMessages() {
                     size="icon"
                     variant="ghost"
                   >
-                    <RotateCcw className="size-3.5 text-slate-200" />
+                    <RotateCcw className="size-3.5 text-gray-900" />
                   </Button>
                 </div>
               )}
@@ -784,8 +785,8 @@ export function ChatMessages() {
           ))}
           {status === "submitted" && (
             <div className="flex text-muted-foreground justify-start gap-2 px-4 py-3 items-center w-full">
-              <Spinner className="size-4" />
-              <TextShimmer className="text-sm" duration={1.5}>
+              <Spinner className="size-4 text-gray-900" />
+              <TextShimmer className="text-sm text-gray-900" duration={1.5}>
                 Thinking...
               </TextShimmer>
             </div>
@@ -815,7 +816,7 @@ export function ChatMessages() {
 
       <div className="px-4 pb-4 pt-1 relative flex-shrink-0">
         <form
-          className="flex flex-col items-end gap-3 bg-card border border-border rounded-[22px] p-3 relative shadow-lg dark:shadow-2xl"
+          className="flex bg-white flex-col items-end gap-3 border border-border border-slate-900 rounded-[22px] p-3 relative shadow-lg dark:shadow-2xl"
           onSubmit={(e) => {
             e.preventDefault();
             if (status === "submitted") return;
@@ -836,10 +837,10 @@ export function ChatMessages() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask your follow-up question..."
-            className="w-full text-slate-200 placeholder:text-muted-foreground rounded-md outline-none resize-none text-base leading-relaxed px-3 py-3 bg-transparent"
+            className="w-full text-gray-900 placeholder:text-gray-500 rounded-md outline-none resize-none text-base leading-relaxed px-3 py-3 bg-transparent"
             rows={3}
           />
-          <div className="absolute bottom-2 right-2">
+          <div className="absolute bottom-2 right-2 bg-gray-500 rounded-xl">
             <Button
               type="submit"
               disabled={!input.trim()}

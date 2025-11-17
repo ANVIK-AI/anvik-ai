@@ -1,21 +1,21 @@
-import { ArrowUpRight, Shield, Sparkles, Zap } from 'lucide-react'
+import { ArrowUpRight, Shield, Sparkles, Zap } from "lucide-react";
 
-const navLinks = ['Product', 'Use cases', 'Pricing', 'Docs', 'Company']
+const navLinks = ["Product", "Use cases", "Pricing", "Docs", "Company"];
 
 const metrics = [
-  { value: '12k+', label: 'Builders' },
-  { value: '50M', label: 'Tokens / user' },
-  { value: ' <300 ms', label: 'Recall latency' },
-]
+  { value: "12k+", label: "Builders" },
+  { value: "50M", label: "Tokens / user" },
+  { value: " <300 ms", label: "Recall latency" },
+];
 
 const callouts = [
-  'Self-healing memory graph',
-  'Cloudflare Durable Objects',
-  'Semantic + keyword recall',
-  'Postgres vector engine',
-]
+  "Self-healing memory graph",
+  // "Cloudflare Durable Objects",
+  "Semantic + keyword recall",
+  "Postgres vector engine",
+];
 
-const partnerLogos = ['LDN', 'YTQ', 'SOLA', 'QBIT', 'ARC']
+const partnerLogos = ["LDN", "YTQ", "SOLA", "QBIT", "ARC"];
 
 function AuthShowcase({}: any) {
   return (
@@ -40,13 +40,17 @@ function AuthShowcase({}: any) {
       </header>
 
       <div className="hero-body">
-        <p className="hero-eyebrow">Inspired by Buttermax</p>
+        {/* <p className="hero-eyebrow">Inspired by Buttermax</p> */}
         <h1>
           Intelligence without memory is randomness. Make it unforgettable.
         </h1>
         <p>
-          A buttermax-grade landing crafted for Anvik—live gradients, glass layers, and cinematic
-          typography to frame your login experience.
+          AI systems lose context as user data evolves.Vector databases fail to
+          track relationships.
+        </p>
+        <p>
+          RAGs retrieve knowledge but can’t remember. Try Anvik AI's
+          personalization memory API.
         </p>
         <div className="hero-cta-row">
           <button className="hero-primary">Get started</button>
@@ -66,12 +70,16 @@ function AuthShowcase({}: any) {
       <div className="hero-panels">
         <div className="hero-panel glass-panel">
           <Shield size={32} />
-          <p>Memories update, expire, and self-heal so your agents stay human-like.</p>
+          <p>
+            Memories update, expire, and self-heal so your agents stay
+            human-like.
+          </p>
         </div>
         <div className="hero-panel glass-panel">
           <Zap size={32} />
           <p>
-            Recall from chats, docs, and events with butter-smooth <strong>&lt;300ms</strong> latency.
+            Recall from chats, docs, and events with butter-smooth{" "}
+            <strong>&lt;300ms</strong> latency.
           </p>
         </div>
       </div>
@@ -91,8 +99,7 @@ function AuthShowcase({}: any) {
         ))}
       </div>
     </section>
-  )
+  );
 }
 
-export default AuthShowcase
-
+export default AuthShowcase;

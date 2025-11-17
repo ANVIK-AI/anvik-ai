@@ -36,7 +36,7 @@ export default function Layout({ setShowTestPage }: any) {
   }, []);
 
   return (
-    <div className="relative min-h-screen bg-[#0B0C16]">
+    <div className="relative bg-[#c1c2c1] flex-1 flex flex-col min-h-screen">
       <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-white/10">
         <Header
           onAddMemory={() => {
