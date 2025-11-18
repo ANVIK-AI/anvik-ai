@@ -1,29 +1,34 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Brain, Mail, Lock } from "lucide-react";
-import AuthShowcase from "@/components/AuthShowcase";
-import "../components/Auth.css";
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Brain, Mail, Lock } from 'lucide-react';
+import AuthShowcase from '@/components/AuthShowcase';
+import '../components/Auth.css';
 
-function Login({ setIsAuthenticated }: any) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+function Login({ setIsAuthenticated, isAuthenticated }: any) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/chat');
+    }
+  }, [isAuthenticated, navigate]);
   const handleSubmit = async (e: any) => {
     e.preventDefault();
-    setError("");
+    setError('');
     setLoading(true);
 
     // Simulate API call
     setTimeout(() => {
       if (email && password) {
-        localStorage.setItem("authToken", "mock-token-" + Date.now());
+        localStorage.setItem('authToken', 'mock-token-' + Date.now());
         setIsAuthenticated(true);
-        navigate("/chat");
+        navigate('/chat');
       } else {
-        setError("Please fill in all fields");
+        setError('Please fill in all fields');
       }
       setLoading(false);
     }, 500);
@@ -79,7 +84,7 @@ function Login({ setIsAuthenticated }: any) {
           </div>
 
           <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? "Signing in..." : "Sign in"}
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
 
           <div className="auth-footer">

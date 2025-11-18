@@ -1,18 +1,18 @@
 // src/app.ts
-import express from "express";
-import helmet from "helmet";
-import cors from "cors";
-import rateLimit from "express-rate-limit";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
+import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 // import logger from "./utils/logger";
-import { requestLogger } from "./middleware/requestLogger.js";
+// import { requestLogger } from "./middleware/requestLogger.js";
 // import authRoutes from "./api/auth/auth.routes.js";
 // import usersRoutes from "./api/users/users.routes.js";
-import { errorHandler } from "./middleware/errorHandler.js";
-import documentRoutes from "./routes/document.routes";
-import chatRoutes from "./routes/chat.routes";
+import { errorHandler } from './middleware/errorHandler.js';
+import documentRoutes from './routes/document.routes';
+import chatRoutes from './routes/chat.routes';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -26,7 +26,7 @@ const corsOptions: cors.CorsOptions = {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -35,10 +35,10 @@ const corsOptions: cors.CorsOptions = {
 const app = express();
 
 // Local file storage for demo purposes. Replace with S3/GCS in prod.
-const uploadsDir = path.join(process.cwd(), 'uploads')
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-const upload = multer({ 
+const upload = multer({
   dest: uploadsDir,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
@@ -56,16 +56,16 @@ const upload = multer({
       'image/jpeg',
       'image/png',
       'image/gif',
-      'image/webp'
-    ]
-    
+      'image/webp',
+    ];
+
     if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true)
+      cb(null, true);
     } else {
-      cb(new Error('File type not allowed'), false)
+      cb(new Error('File type not allowed'), false);
     }
-  }
-})
+  },
+});
 
 app.use(express.json());
 app.use(helmet());
@@ -75,8 +75,8 @@ app.use(cors(corsOptions));
 app.use(
   rateLimit({
     windowMs: 1 * 60 * 1000,
-    max: 100
-  })
+    max: 100,
+  }),
 );
 
 // Add multer middleware for file uploads
@@ -93,9 +93,9 @@ app.use('/v3/documents/file', upload.single('file'), (err, req, res, next) => {
   next();
 });
 
-app.get("/health", (_req, res) => res.send({ status: "ok" }));
-app.use("/", documentRoutes);
-app.use("/", chatRoutes);
+app.get('/health', (_req, res) => res.send({ status: 'ok' }));
+app.use('/', documentRoutes);
+app.use('/', chatRoutes);
 // app.use("/api/auth", authRoutes);
 // app.use("/api/users", usersRoutes);
 

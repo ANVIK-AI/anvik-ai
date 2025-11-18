@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "prisma",
+    "generated",
+    "generated/**",
+    "uploads"
+  ],
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "declarationMap": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
+    "sourceMap": true,
+    "skipLibCheck": true
+  }
+}

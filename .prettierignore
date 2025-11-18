@@ -1,0 +1,22 @@
+# Output directories
+backend/dist
+frontend/dist
+frontend/build
+backend/generated
+backend/uploads
+
+# Node modules
+device.json
+node_modules
+
+# Lockfiles (do not format)
+package-lock.json
+backend/package-lock.json
+frontend/package-lock.json
+
+# Logs
+*.log
+
+# Broken sample JSON logs
+frontend/src/components/demo.json.json
+**/*.json.json

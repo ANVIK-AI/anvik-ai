@@ -1,30 +1,30 @@
-import { useState, useEffect } from 'react'
-import './LoadingScreen.css'
+import { useState, useEffect } from 'react';
+import './LoadingScreen.css';
 
-function LoadingScreen({ onComplete }) {
-  const [progress, setProgress] = useState(0)
+function LoadingScreen({ onComplete }: any) {
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const duration = 2000 // 2 seconds
-    const interval = 16 // ~60fps
-    const increment = 100 / (duration / interval)
+    const duration = 2000; // 2 seconds
+    const interval = 16; // ~60fps
+    const increment = 100 / (duration / interval);
 
     const timer = setInterval(() => {
       setProgress((prev) => {
-        const newProgress = prev + increment
+        const newProgress = prev + increment;
         if (newProgress >= 100) {
-          clearInterval(timer)
+          clearInterval(timer);
           setTimeout(() => {
-            onComplete()
-          }, 300)
-          return 100
+            onComplete();
+          }, 300);
+          return 100;
         }
-        return newProgress
-      })
-    }, interval)
+        return newProgress;
+      });
+    }, interval);
 
-    return () => clearInterval(timer)
-  }, [onComplete])
+    return () => clearInterval(timer);
+  }, [onComplete]);
 
   return (
     <div className="loading-screen">
@@ -34,15 +34,11 @@ function LoadingScreen({ onComplete }) {
           <span className="loading-label">ANVIK</span>
         </div>
         <div className="loading-bar-container">
-          <div 
-            className="loading-bar" 
-            style={{ width: `${progress}%` }}
-          />
+          <div className="loading-bar" style={{ width: `${progress}%` }} />
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default LoadingScreen
-
+export default LoadingScreen;

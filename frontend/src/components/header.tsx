@@ -1,14 +1,10 @@
-import { Button } from "@ui/components/button";
-import { Logo, LogoFull } from "@ui/assets/Logo";
-import { Plus, WaypointsIcon, HistoryIcon, Trash2 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@ui/components/tooltip";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useGraphModal, useProject } from "@/stores";
-import { usePersistentChat } from "@/stores/chat";
+import { Button } from '@ui/components/button';
+import { Logo } from '@ui/assets/Logo';
+import { Plus, WaypointsIcon, HistoryIcon, Trash2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@ui/components/tooltip';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useGraphModal, useProject } from '@/stores';
+import { usePersistentChat } from '@/stores/chat';
 
 import {
   Dialog,
@@ -17,11 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@ui/dialog";
-import { ScrollArea } from "@ui/components/scroll-area";
-import { formatDistanceToNow } from "date-fns";
-import { cn } from "@lib/utils";
-import { useEffect, useMemo, useState } from "react";
+} from '@ui/dialog';
+import { ScrollArea } from '@ui/components/scroll-area';
+import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@lib/utils';
+import { useEffect, useMemo, useState } from 'react';
 
 export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,41 +29,24 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
     back: () => navigate(-1),
   };
   const { setIsOpen: setGraphModalOpen } = useGraphModal();
-  const {
-    getCurrentChat,
-    conversations,
-    currentChatId,
-    setCurrentChatId,
-    deleteConversation,
-  } = usePersistentChat();
+  const { getCurrentChat, conversations, currentChatId, setCurrentChatId, deleteConversation } =
+    usePersistentChat();
   const { selectedProject } = useProject();
   const location = useLocation();
   const pathname = location.pathname;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [mcpModalOpen, setMcpModalOpen] = useState(false);
-  const [mcpInitialClient, setMcpInitialClient] = useState<"mcp-url" | null>(
-    null
-  );
-  const [mcpInitialTab, setMcpInitialTab] = useState<
-    "oneClick" | "manual" | null
-  >(null);
 
   const sorted = useMemo(() => {
-    return [...conversations].sort((a, b) =>
-      a.lastUpdated < b.lastUpdated ? 1 : -1
-    );
+    return [...conversations].sort((a, b) => (a.lastUpdated < b.lastUpdated ? 1 : -1));
   }, [conversations]);
 
   useEffect(() => {
-    console.log("searchParams", searchParams.get("mcp"));
-    const mcpParam = searchParams.get("mcp");
-    if (mcpParam === "manual") {
-      setMcpInitialClient("mcp-url");
-      setMcpInitialTab("manual");
-      setMcpModalOpen(true);
+    console.log('searchParams', searchParams.get('mcp'));
+    const mcpParam = searchParams.get('mcp');
+    if (mcpParam === 'manual') {
       const newSearchParams = new URLSearchParams(searchParams.toString());
-      newSearchParams.delete("mcp");
+      newSearchParams.delete('mcp');
       setSearchParams(newSearchParams, { replace: true });
     }
   }, [searchParams]);
@@ -90,13 +69,13 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
           <a
             className="pointer-events-auto"
             href={
-              process.env.NODE_ENV === "development"
-                ? "http://localhost:5173"
-                : "https://app.supermemory.ai"
+              process.env.NODE_ENV === 'development'
+                ? 'http://localhost:5173'
+                : 'https://app.supermemory.ai'
             }
             rel="noopener noreferrer"
           >
-            {getCurrentChat()?.title && pathname.includes("/chat") ? (
+            {getCurrentChat()?.title && pathname.includes('/chat') ? (
               <div className="flex items-center gap-4">
                 <Logo className="h-6 block text-foreground" />
                 <span className="truncate">{getCurrentChat()?.title}</span>
@@ -112,12 +91,7 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
         </div>
 
         <div className="flex items-center gap-1.5 md:gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onAddMemory}
-            className="gap-1.5 bg-white"
-          >
+          <Button variant="secondary" size="sm" onClick={onAddMemory} className="gap-1.5 bg-white">
             <Plus className="h-4 w-4 text-gray-900" />
             <span className="hidden sm:inline text-gray-900">Add Memory</span>
             <span className="hidden md:inline bg-secondary-foreground/10 rounded-md px-2 py-[2px] text-xs">
@@ -146,10 +120,7 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
               <DialogHeader className="pb-4 border-b rounded-t-lg">
                 <DialogTitle className="">Conversations</DialogTitle>
                 <DialogDescription>
-                  Project{" "}
-                  <span className="font-mono font-medium">
-                    {selectedProject}
-                  </span>
+                  Project <span className="font-mono font-medium">{selectedProject}</span>
                 </DialogDescription>
               </DialogHeader>
 
@@ -167,21 +138,21 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
                           setIsDialogOpen(false);
                         }}
                         className={cn(
-                          "flex items-center justify-between rounded-md px-3 py-2 outline-none w-full text-left",
-                          "transition-colors",
-                          isActive ? "bg-primary/10" : "hover:bg-muted"
+                          'flex items-center justify-between rounded-md px-3 py-2 outline-none w-full text-left',
+                          'transition-colors',
+                          isActive ? 'bg-primary/10' : 'hover:bg-muted',
                         )}
-                        aria-current={isActive ? "true" : undefined}
+                        aria-current={isActive ? 'true' : undefined}
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span
                               className={cn(
-                                "text-sm font-medium truncate",
-                                isActive ? "text-foreground" : undefined
+                                'text-sm font-medium truncate',
+                                isActive ? 'text-foreground' : undefined,
                               )}
                             >
-                              {c.title || "Untitled Chat"}
+                              {c.title || 'Untitled Chat'}
                             </span>
                           </div>
                           <div className="text-xs text-muted-foreground">

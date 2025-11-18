@@ -1,17 +1,17 @@
-import "./App.css";
-import { DocumentRoutesTester } from "./pages/document-routes-tester";
-import { ChatTester } from "./pages/chatTester";
-import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
-import Layout from "./pages/layout";
-import Home from "./pages/Home";
-import { ChatMessages } from "./components/views/chat/chat-messages";
-import { useEffect, useState } from "react";
-import Chat from "./pages/Chat";
-import Login from "./pages/Login";
-import { authAPI } from "./services/api";
-import PortfolioHome from "./pages/PortfolioHome";
-import ThreeBackground from "./ui/components/ThreeBackground";
-import Signup from "./pages/Signup";
+import './App.css';
+import { DocumentRoutesTester } from './pages/document-routes-tester';
+import { ChatTester } from './pages/chatTester';
+import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import Layout from './pages/layout';
+import Home from './pages/Home';
+import { ChatMessages } from './components/views/chat/chat-messages';
+import { useEffect, useState } from 'react';
+import Chat from './pages/Chat';
+import Login from './pages/Login';
+import { authAPI } from './services/api';
+import PortfolioHome from './pages/PortfolioHome';
+import ThreeBackground from './ui/components/ThreeBackground';
+import Signup from './pages/Signup';
 
 function App() {
   const [showTestPage, setShowTestPage] = useState(true);
@@ -22,7 +22,7 @@ function App() {
 
   useEffect(() => {
     // Check if user is logged in and validate token
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem('authToken');
     if (token) {
       // Optionally validate token with backend
       authAPI
@@ -61,7 +61,7 @@ function App() {
             element={
               <div className="app-content">
                 <ThreeBackground />
-                <Login setIsAuthenticated={setIsAuthenticated} />
+                <Login setIsAuthenticated={setIsAuthenticated} isAuthenticated={isAuthenticated} />
               </div>
             }
           />
@@ -95,12 +95,7 @@ function App() {
   );
 }
 
-const TestPage = ({
-  showTestPage,
-  setShowTestPage,
-  showChatPage,
-  setShowChatPage,
-}: any) => {
+const TestPage = ({ showTestPage, setShowTestPage, showChatPage, setShowChatPage }: any) => {
   const navigate = useNavigate();
   return (
     <div className="">
@@ -109,7 +104,7 @@ const TestPage = ({
           <button
             onClick={() => {
               setShowTestPage(false);
-              navigate("/chat");
+              navigate('/chat');
             }}
             className="absolute top-4 left-4 z-50 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >

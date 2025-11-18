@@ -1,13 +1,13 @@
-import prisma from "../db/prismaClient";
+import prisma from '../db/prismaClient';
 import {
   DocumentsWithMemoriesQuerySchema,
   DocumentWithMemoriesSchema,
   MemoryEntryAPISchema,
-} from "../validation/api";
-import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
-import fs from "fs";
-import { boss, JOB_PROCESS_DOCUMENT } from "../queue";
+} from '../validation/api';
+import { z } from 'zod';
+import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import { boss, JOB_PROCESS_DOCUMENT } from '../queue';
 
 // --- Type Definitions for Clarity ---
 
@@ -19,7 +19,6 @@ type FormattedDocument = z.infer<typeof DocumentWithMemoriesSchema>;
 
 // Type for the final shape of a single memory entry in the response
 type FormattedMemoryEntry = z.infer<typeof MemoryEntryAPISchema>;
-
 
 /**
  * A robust helper function to parse vector strings from the database.
@@ -34,16 +33,15 @@ function parseVectorString(vectorString: string | null | undefined): number[] | 
   }
   try {
     const parsed = JSON.parse(vectorString);
-    if (Array.isArray(parsed) && parsed.every(item => typeof item === 'number')) {
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'number')) {
       return parsed;
     }
     return null;
   } catch (error) {
-    console.error("Failed to parse vector string:", vectorString, error);
+    console.error('Failed to parse vector string:', vectorString, error);
     return null; // Return null on parsing error to avoid crashes
   }
 }
-
 
 /**
  * Fetches documents and their associated memory entries with filtering and pagination.
@@ -89,15 +87,18 @@ export async function getDocumentsWithMemories(input: QueryInput) {
       include: {
         // We fetch the join table records...
         memorySources: {
-          where: containerTags && containerTags.length > 0 ? {
-            memoryEntry: {
-              space: {
-                containerTag: {
-                  in: containerTags,
-                },
-              },
-            },
-          } : {},
+          where:
+            containerTags && containerTags.length > 0
+              ? {
+                  memoryEntry: {
+                    space: {
+                      containerTag: {
+                        in: containerTags,
+                      },
+                    },
+                  },
+                }
+              : {},
           include: {
             // ...and for each join record, we include the full memory entry.
             // This nested include is the key to getting all related data.
@@ -145,7 +146,9 @@ export async function getDocumentsWithMemories(input: QueryInput) {
       ...documentData,
       // --- Data Type Conversions ---
       summaryEmbedding: parseVectorString(documentData.summaryEmbedding),
-      averageChunkSize: documentData.averageChunkSize ? Number(documentData.averageChunkSize) : null,
+      averageChunkSize: documentData.averageChunkSize
+        ? Number(documentData.averageChunkSize)
+        : null,
       // --- Formatted Relationship Array ---
       memoryEntries,
       // --- Type Conversions ---
@@ -172,34 +175,34 @@ export async function getDocumentsWithMemories(input: QueryInput) {
   };
 }
 
-function inferTypeFromMime(mime: string) {
-  if (mime.includes('pdf')) return 'pdf'
-  if (mime.includes('wordprocessingml') || mime.includes('msword')) return 'text' // doc/docx => text after conversion
-  if (mime.startsWith('image/')) return 'image'
-  if (mime.includes('csv')) return 'text'
-  if (mime.includes('json')) return 'text'
-  if (mime.includes('markdown') || mime.includes('text')) return 'text'
-  return 'text'
-}
+// function inferTypeFromMime(mime: string) {
+//   if (mime.includes('pdf')) return 'pdf'
+//   if (mime.includes('wordprocessingml') || mime.includes('msword')) return 'text' // doc/docx => text after conversion
+//   if (mime.startsWith('image/')) return 'image'
+//   if (mime.includes('csv')) return 'text'
+//   if (mime.includes('json')) return 'text'
+//   if (mime.includes('markdown') || mime.includes('text')) return 'text'
+//   return 'text'
+// }
 
 export async function uploadDocumentFile({
   file,
   containerTags,
   orgId,
-  userId
+  userId,
 }: {
-  file: any
-  containerTags: string[]
-  orgId: string
-  userId: string
+  file: any;
+  containerTags: string[];
+  orgId: string;
+  userId: string;
 }) {
   // Ensure spaces exist for each containerTag
-  const spaceIds: string[] = []
+  const spaceIds: string[] = [];
   for (const tag of containerTags) {
     // First try to find existing space
     let space = await prisma.space.findFirst({
-      where: { containerTag: tag }
-    })
+      where: { containerTag: tag },
+    });
 
     if (!space) {
       // Create new space if it doesn't exist
@@ -212,34 +215,34 @@ export async function uploadDocumentFile({
           visibility: 'private',
           isExperimental: false,
         },
-      })
+      });
     }
-    console.log("here it is ")
-    spaceIds.push(space.id)
+    console.log('here it is ');
+    spaceIds.push(space.id);
   }
 
   // Insert document stub with status queued
-  const id = uuidv4()
-  const type = inferTypeFromMime(file.mimetype)
-  const metadata = {
-    sm_internal_fileName: file.originalname,
-    sm_internal_fileSize: file.size,
-    sm_internal_fileType: file.mimetype,
-  }
+  const id = uuidv4();
+  // const type = inferTypeFromMime(file.mimetype)
+  // const metadata = {
+  //   sm_internal_fileName: file.originalname,
+  //   sm_internal_fileSize: file.size,
+  //   sm_internal_fileType: file.mimetype,
+  // }
 
   // AI-generated title will be set by the worker after content extraction
-  const document = await prisma.document.create({
-    data: {
-      id,
-      orgId,
-      userId,
-      title: file.originalname,
-      type,
-      status: 'queued',
-      metadata,
-      processingMetadata: { startTime: Date.now(), steps: [] },
-    },
-  })
+  // const document = await prisma.document.create({
+  //   data: {
+  //     id,
+  //     orgId,
+  //     userId,
+  //     title: file.originalname,
+  //     type,
+  //     status: 'queued',
+  //     metadata,
+  //     processingMetadata: { startTime: Date.now(), steps: [] },
+  //   },
+  // })
 
   // Link document to spaces
   for (const spaceId of spaceIds) {
@@ -248,54 +251,56 @@ export async function uploadDocumentFile({
         documentId: id,
         spaceId,
       },
-    })
+    });
   }
 
   // Store raw file bytes (optional). For large files prefer object storage.
   //TODO: update storing of files to cloudinary
-  const raw = fs.readFileSync(file.path)
+  const raw = fs.readFileSync(file.path);
   await prisma.document.update({
     where: { id },
     data: { raw },
-  })
+  });
 
   // Clean up temporary file
   try {
-    fs.unlinkSync(file.path)
+    fs.unlinkSync(file.path);
   } catch (error) {
-    console.warn('Failed to delete temporary file:', error)
+    console.warn('Failed to delete temporary file:', error);
   }
 
-  console.log("heyyy")
+  console.log('heyyy');
   // Enqueue processing job
-  await boss.send(JOB_PROCESS_DOCUMENT, {
-    documentId: id,
-    containerTags,
-    mimetype: file.mimetype
-  }).catch((e) => {
-    console.log(e)
-  })
+  await boss
+    .send(JOB_PROCESS_DOCUMENT, {
+      documentId: id,
+      containerTags,
+      mimetype: file.mimetype,
+    })
+    .catch((e) => {
+      console.log(e);
+    });
 
   // Respond immediately
-  return { id, status: 'queued' }
+  return { id, status: 'queued' };
 }
 
 export async function updateDocumentMetadata(id: string, metadata: any) {
-  const existingDoc = await prisma.document.findUnique({ where: { id } })
+  const existingDoc = await prisma.document.findUnique({ where: { id } });
   if (!existingDoc) {
-    throw new Error('Document not found')
+    throw new Error('Document not found');
   }
 
   const document = await prisma.document.update({
     where: { id },
     data: {
       metadata: {
-        ...(existingDoc.metadata as any || {}),
+        ...((existingDoc.metadata as any) || {}),
         ...metadata,
       },
       updatedAt: new Date(),
     },
-  })
+  });
 
-  return { id: document.id, status: document.status }
+  return { id: document.id, status: document.status };
 }

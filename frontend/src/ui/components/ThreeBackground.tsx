@@ -1,14 +1,14 @@
-import { useEffect, useRef } from 'react'
-import * as THREE from 'three'
-import './ThreeBackground.css'
+import { useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import './ThreeBackground.css';
 
-function createWavePlane(colorA, colorB, rotationY = 0) {
-  const geometry = new THREE.PlaneGeometry(60, 60, 220, 220)
+function createWavePlane(colorA: string, colorB: string, rotationY = 0) {
+  const geometry = new THREE.PlaneGeometry(60, 60, 220, 220);
   const uniforms = {
     uTime: { value: 0 },
     uColor1: { value: new THREE.Color(colorA) },
     uColor2: { value: new THREE.Color(colorB) },
-  }
+  };
 
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -41,103 +41,104 @@ function createWavePlane(colorA, colorB, rotationY = 0) {
         gl_FragColor = vec4(color, 0.5);
       }
     `,
-  })
+  });
 
-  const mesh = new THREE.Mesh(geometry, material)
-  mesh.rotation.x = -Math.PI / 2.4
-  mesh.rotation.y = rotationY
-  mesh.position.y = -10
-  mesh.userData.uniforms = uniforms
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2.4;
+  mesh.rotation.y = rotationY;
+  mesh.position.y = -10;
+  mesh.userData.uniforms = uniforms;
 
-  return mesh
+  return mesh;
 }
 
 function ThreeBackground() {
-  const containerRef = useRef(null)
-  const animationRef = useRef(null)
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const animationRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+    const container = containerRef.current;
+    if (!container) return;
 
-    const scene = new THREE.Scene()
+    const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
       45,
       window.innerWidth / window.innerHeight,
       0.1,
       1000,
-    )
-    camera.position.set(0, 10, 35)
+    );
+    camera.position.set(0, 10, 35);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    container.appendChild(renderer.domElement)
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
 
-    const waveOne = createWavePlane('#4cc9f0', '#c084fc')
-    const waveTwo = createWavePlane('#f472b6', '#facc15', Math.PI / 6)
-    waveTwo.position.y = -12
-    scene.add(waveOne)
-    scene.add(waveTwo)
+    const waveOne = createWavePlane('#4cc9f0', '#c084fc');
+    const waveTwo = createWavePlane('#f472b6', '#facc15', Math.PI / 6);
+    waveTwo.position.y = -12;
+    scene.add(waveOne);
+    scene.add(waveTwo);
 
-    const starsGeometry = new THREE.BufferGeometry()
-    const starCount = 600
-    const starPositions = new Float32Array(starCount * 3)
+    const starsGeometry = new THREE.BufferGeometry();
+    const starCount = 600;
+    const starPositions = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount * 3; i += 3) {
-      starPositions[i] = (Math.random() - 0.5) * 120
-      starPositions[i + 1] = Math.random() * 80
-      starPositions[i + 2] = (Math.random() - 0.5) * 120
+      starPositions[i] = (Math.random() - 0.5) * 120;
+      starPositions[i + 1] = Math.random() * 80;
+      starPositions[i + 2] = (Math.random() - 0.5) * 120;
     }
-    starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3))
+    starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
     const starsMaterial = new THREE.PointsMaterial({
       color: '#ffffff',
       size: 0.5,
       transparent: true,
       opacity: 0.35,
-    })
-    const stars = new THREE.Points(starsGeometry, starsMaterial)
-    scene.add(stars)
+    });
+    const stars = new THREE.Points(starsGeometry, starsMaterial);
+    scene.add(stars);
 
-    const clock = new THREE.Clock()
+    const clock = new THREE.Clock();
 
     const animate = () => {
-      const elapsed = clock.getElapsedTime()
-      waveOne.userData.uniforms.uTime.value = elapsed
-      waveTwo.userData.uniforms.uTime.value = elapsed * 0.9
-      stars.rotation.y += 0.0005
+      const elapsed = clock.getElapsedTime();
+      waveOne.userData.uniforms.uTime.value = elapsed;
+      waveTwo.userData.uniforms.uTime.value = elapsed * 0.9;
+      stars.rotation.y += 0.0005;
 
-      renderer.render(scene, camera)
-      animationRef.current = requestAnimationFrame(animate)
-    }
+      renderer.render(scene, camera);
+      animationRef.current = requestAnimationFrame(animate);
+    };
 
-    animate()
+    animate();
 
     const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight
-      camera.updateProjectionMatrix()
-      renderer.setSize(window.innerWidth, window.innerHeight)
-    }
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
 
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('resize', handleResize);
 
     return () => {
-      cancelAnimationFrame(animationRef.current)
-      window.removeEventListener('resize', handleResize)
-      renderer.dispose()
-      waveOne.geometry.dispose()
-      waveTwo.geometry.dispose()
-      waveOne.material.dispose()
-      waveTwo.material.dispose()
-      starsGeometry.dispose()
-      starsMaterial.dispose()
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement)
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
       }
-    }
-  }, [])
+      window.removeEventListener('resize', handleResize);
+      renderer.dispose();
+      waveOne.geometry.dispose();
+      waveTwo.geometry.dispose();
+      waveOne.material.dispose();
+      waveTwo.material.dispose();
+      starsGeometry.dispose();
+      starsMaterial.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
+    };
+  }, []);
 
-  return <div className="three-background" aria-hidden="true" ref={containerRef} />
+  return <div className="three-background" aria-hidden="true" ref={containerRef} />;
 }
 
-export default ThreeBackground
-
+export default ThreeBackground;

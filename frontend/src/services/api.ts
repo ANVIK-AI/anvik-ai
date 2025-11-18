@@ -3,55 +3,61 @@
  * Handles all communication with the backend API
  */
 
-const BACKEND_URL = (import.meta.env?.VITE_BACKEND_URL || 'http://localhost:3000').replace(/\/+$/, '')
+const BACKEND_URL = (import.meta.env?.VITE_BACKEND_URL || 'http://localhost:3000').replace(
+  /\/+$/,
+  '',
+);
 
 // Log backend URL in development for debugging
 if (import.meta.env.DEV) {
-  console.log('🔗 Backend URL:', BACKEND_URL)
-  console.log('📝 Environment variable VITE_BACKEND_URL:', import.meta.env?.VITE_BACKEND_URL || 'not set (using default)')
+  console.log('🔗 Backend URL:', BACKEND_URL);
+  console.log(
+    '📝 Environment variable VITE_BACKEND_URL:',
+    import.meta.env?.VITE_BACKEND_URL || 'not set (using default)',
+  );
 }
 
 /**
  * Get authentication headers with token
  */
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('authToken')
+  const token = localStorage.getItem('authToken');
   return {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
-  }
-}
+  };
+};
 
 /**
  * Handle API response
  */
-const handleResponse = async (response) => {
+const handleResponse = async (response: any) => {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }))
-    throw new Error(error.message || `Request failed with status ${response.status}`)
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `Request failed with status ${response.status}`);
   }
-  return response.json()
-}
+  return response.json();
+};
 
 /**
  * Handle fetch errors with better error messages
  */
-const handleFetchError = (error, endpoint) => {
-  console.error(`API Error (${endpoint}):`, error)
-  
+const handleFetchError = (error: any, endpoint: string): any => {
+  console.error(`API Error (${endpoint}):`, error);
+
   if (error.name === 'TypeError' && error.message.includes('fetch')) {
     // Network error - backend not reachable
     throw new Error(
       `Cannot connect to backend server at ${BACKEND_URL}. ` +
-      `Please ensure:\n` +
-      `1. Backend server is running on port 3000\n` +
-      `2. CORS is enabled on the backend\n` +
-      `3. Backend URL is correct (check .env file)`
-    )
+        `Please ensure:\n` +
+        `1. Backend server is running on port 3000\n` +
+        `2. CORS is enabled on the backend\n` +
+        `3. Backend URL is correct (check .env file)`,
+    );
   }
-  
-  throw error
-}
+
+  throw error;
+};
 
 /**
  * Authentication API
@@ -60,7 +66,7 @@ export const authAPI = {
   /**
    * Register a new user
    */
-  signup: async (name, email, password) => {
+  signup: async (name: string, email: string, password: string) => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/signup`, {
         method: 'POST',
@@ -68,22 +74,22 @@ export const authAPI = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ name, email, password }),
-      })
-      const data = await handleResponse(response)
+      });
+      const data = await handleResponse(response);
       if (data.token) {
-        localStorage.setItem('authToken', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
       }
-      return data
+      return data;
     } catch (error) {
-      handleFetchError(error, '/api/auth/signup')
+      handleFetchError(error, '/api/auth/signup');
     }
   },
 
   /**
    * Login user
    */
-  login: async (email, password) => {
+  login: async (email: string, password: string) => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
@@ -91,15 +97,15 @@ export const authAPI = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
-      })
-      const data = await handleResponse(response)
+      });
+      const data = await handleResponse(response);
       if (data.token) {
-        localStorage.setItem('authToken', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
       }
-      return data
+      return data;
     } catch (error) {
-      handleFetchError(error, '/api/auth/login')
+      handleFetchError(error, '/api/auth/login');
     }
   },
 
@@ -107,8 +113,8 @@ export const authAPI = {
    * Logout user
    */
   logout: () => {
-    localStorage.removeItem('authToken')
-    localStorage.removeItem('user')
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
   },
 
   /**
@@ -118,10 +124,10 @@ export const authAPI = {
     const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 /**
  * AI Chat API
@@ -130,7 +136,7 @@ export const chatAPI = {
   /**
    * Send a message to the AI
    */
-  sendMessage: async (prompt, history = [], files = []) => {
+  sendMessage: async (prompt: string, history: any[] = [], files: File[] = []) => {
     const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -146,8 +152,8 @@ export const chatAPI = {
           type: file.type,
         })),
       }),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
@@ -157,21 +163,21 @@ export const chatAPI = {
     const response = await fetch(`${BACKEND_URL}/api/ai/history`, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Delete a chat
    */
-  deleteChat: async (chatId) => {
+  deleteChat: async (chatId: string) => {
     const response = await fetch(`${BACKEND_URL}/api/ai/chat/${chatId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 /**
  * Memory/Document API
@@ -180,19 +186,19 @@ export const memoryAPI = {
   /**
    * Upload a document (PDF, etc.)
    */
-  uploadDocument: async (file) => {
-    const formData = new FormData()
-    formData.append('file', file)
+  uploadDocument: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
 
-    const token = localStorage.getItem('authToken')
+    const token = localStorage.getItem('authToken');
     const response = await fetch(`${BACKEND_URL}/api/memory/newdoc`, {
       method: 'POST',
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },
       body: formData,
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
@@ -202,21 +208,21 @@ export const memoryAPI = {
     const response = await fetch(`${BACKEND_URL}/api/memory/documents`, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Delete a document
    */
-  deleteDocument: async (documentId) => {
+  deleteDocument: async (documentId: string) => {
     const response = await fetch(`${BACKEND_URL}/api/memory/documents/${documentId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 /**
  * Calendar Tool API
@@ -225,52 +231,52 @@ export const calendarAPI = {
   /**
    * Get calendar events
    */
-  getEvents: async (startDate, endDate) => {
+  getEvents: async (startDate: string, endDate: string) => {
     const response = await fetch(
       `${BACKEND_URL}/api/tools/calendar/events?start=${startDate}&end=${endDate}`,
       {
         method: 'GET',
         headers: getAuthHeaders(),
-      }
-    )
-    return handleResponse(response)
+      },
+    );
+    return handleResponse(response);
   },
 
   /**
    * Create a calendar event
    */
-  createEvent: async (eventData) => {
+  createEvent: async (eventData: any) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/calendar/events`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(eventData),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Update a calendar event
    */
-  updateEvent: async (eventId, eventData) => {
+  updateEvent: async (eventId: string, eventData: any) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/calendar/events/${eventId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(eventData),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Delete a calendar event
    */
-  deleteEvent: async (eventId) => {
+  deleteEvent: async (eventId: string) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/calendar/events/${eventId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 /**
  * Notion Tool API
@@ -279,13 +285,13 @@ export const notionAPI = {
   /**
    * Connect Notion account
    */
-  connect: async (code) => {
+  connect: async (code: string) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/notion/connect`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ code }),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
@@ -294,50 +300,50 @@ export const notionAPI = {
   getPages: async (databaseId = null) => {
     const url = databaseId
       ? `${BACKEND_URL}/api/tools/notion/pages?database=${databaseId}`
-      : `${BACKEND_URL}/api/tools/notion/pages`
+      : `${BACKEND_URL}/api/tools/notion/pages`;
     const response = await fetch(url, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Create a Notion page
    */
-  createPage: async (pageData) => {
+  createPage: async (pageData: any) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/notion/pages`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(pageData),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Update a Notion page
    */
-  updatePage: async (pageId, pageData) => {
+  updatePage: async (pageId: string, pageData: any) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/notion/pages/${pageId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(pageData),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Search Notion
    */
-  search: async (query) => {
+  search: async (query: string) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/notion/search`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ query }),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 /**
  * Email Tool API
@@ -346,13 +352,13 @@ export const emailAPI = {
   /**
    * Connect email account
    */
-  connect: async (provider, credentials) => {
+  connect: async (provider: string, credentials: any) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/email/connect`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ provider, credentials }),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
@@ -364,34 +370,34 @@ export const emailAPI = {
       {
         method: 'GET',
         headers: getAuthHeaders(),
-      }
-    )
-    return handleResponse(response)
+      },
+    );
+    return handleResponse(response);
   },
 
   /**
    * Send an email
    */
-  sendEmail: async (emailData) => {
+  sendEmail: async (emailData: any) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/email/send`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(emailData),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Get a specific email
    */
-  getEmail: async (emailId) => {
+  getEmail: async (emailId: string) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/email/messages/${emailId}`, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 /**
  * Tools Management API
@@ -404,8 +410,8 @@ export const toolsAPI = {
     const response = await fetch(`${BACKEND_URL}/api/tools`, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
@@ -415,21 +421,21 @@ export const toolsAPI = {
     const response = await fetch(`${BACKEND_URL}/api/tools/connected`, {
       method: 'GET',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
 
   /**
    * Disconnect a tool
    */
-  disconnectTool: async (toolName) => {
+  disconnectTool: async (toolName: string) => {
     const response = await fetch(`${BACKEND_URL}/api/tools/${toolName}/disconnect`, {
       method: 'POST',
       headers: getAuthHeaders(),
-    })
-    return handleResponse(response)
+    });
+    return handleResponse(response);
   },
-}
+};
 
 export default {
   auth: authAPI,
@@ -439,5 +445,4 @@ export default {
   notion: notionAPI,
   email: emailAPI,
   tools: toolsAPI,
-}
-
+};

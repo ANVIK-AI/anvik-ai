@@ -1,0 +1,33 @@
+{
+  "name": "anvik-ai-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo root for backend and frontend tooling (husky, lint-staged, commitlint, prettier).",
+  "scripts": {
+    "prepare": "husky install",
+    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.4",
+    "prettier": "^3.6.2",
+    "eslint": "^9.38.0"
+  },
+  "lint-staged": {
+    "backend/**/*.{ts,js}": [
+      "npm --prefix backend run lint:fix --",
+      "prettier --write"
+    ],
+    "frontend/**/*.{ts,tsx,js,jsx}": [
+      "npm --prefix frontend run lint:fix --",
+      "prettier --write"
+    ],
+    "**/*.{json,md,css,html}": [
+      "prettier --write"
+    ]
+  }
+}

@@ -1,12 +1,16 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
-  "include": [
-    "src",
-    "src/types"
-  ],
+  "include": ["src/**/*.ts"],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "tests",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "prisma",
+    "generated",
+    "generated/**",
+    "uploads"
   ],
   "compilerOptions": {
     // File Layout
@@ -20,8 +24,10 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true,
+    // For editor typechecking only; build config overrides to emit JS
     "noEmit": true,
-    "emitDeclarationOnly": true,
+    // Avoid declaration generation during dev typecheck to reduce memory
+    "emitDeclarationOnly": false,
     "types": [],
     // For nodejs:
     // "lib": ["esnext"],
@@ -29,8 +35,10 @@
     // and npm install -D @types/node
     // Other Outputs
     "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
     // Stricter Typechecking Options
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -48,6 +56,6 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
+    "skipLibCheck": true
   }
 }

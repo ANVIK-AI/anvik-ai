@@ -5,13 +5,17 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "esbuild --platform=node --format=esm --outdir=dist --sourcemap --tsconfig=tsconfig.build.json \"src/**/*.ts\"",
+    "build:diagnose": "NODE_OPTIONS=--max-old-space-size=4096 tsc -p tsconfig.build.json --extendedDiagnostics --listFiles --listEmittedFiles --generateTrace trace-build",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
     "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=2048 node ./node_modules/typescript/lib/tsc.js --noEmit",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "jest --runInBand",
     "prepare": "husky install",
     "test-job": "node --loader ts-node/esm tests/test-job.ts"
@@ -61,6 +65,7 @@
     "@types/pg": "^8.15.5",
     "@types/uuid": "^10.0.0",
     "eslint": "^9.38.0",
+    "typescript-eslint": "^8.45.0",
     "husky": "^9.1.7",
     "jest": "^30.2.0",
     "lint-staged": "^16.2.4",
@@ -71,6 +76,7 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "esbuild": "^0.24.0"
   }
 }
