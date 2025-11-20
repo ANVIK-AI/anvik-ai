@@ -9,6 +9,8 @@ import { TaskType } from '@google/generative-ai';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { google } from '@ai-sdk/google';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 import { createRequire } from 'module';
 // import { title } from 'process'
@@ -454,7 +456,9 @@ async function generateFallbackContent(
   }
 }
 
+
 async function extractText(documentId: string): Promise<{ text: string; type: string }> {
+  // Fetch document from DB
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
     select: { raw: true, metadata: true },
@@ -468,17 +472,19 @@ async function extractText(documentId: string): Promise<{ text: string; type: st
 
   try {
     if (mime?.includes('pdf')) {
-      const standardFontDataUrl = path.join(
-        path.dirname(require.resolve('pdfjs-dist/package.json')),
-        'standard_fonts/',
-      );
+      // Cross-platform safe path to pdfjs standard fonts
+      const standardFontDataUrl = join(
+        __dirname,
+        '../node_modules/pdfjs-dist/standard_fonts/'
+      ).replace(/\\/g, '/'); // ensures forward slashes for pdfjs
+
       const parser = new PDFParse({ data: raw, standardFontDataUrl });
       const result = await parser.getText();
 
       return { text: result.text, type: 'text' };
     }
-    // TODO: add DOCX/CSV/MD support via libraries (mammoth, papaparse, etc.)
-    // Images: optionally call Gemini vision to OCR and summarize
+
+    // Fallback for non-PDF files
     return { text: raw.toString('utf8'), type: 'text' };
   } catch (error) {
     console.error('Error extracting text:', error);

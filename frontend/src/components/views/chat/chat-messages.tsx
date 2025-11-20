@@ -188,7 +188,7 @@ function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
 export function ChatMessages() {
   //TODO:use this method to set the project id to pass it to backend
   const { selectedProject, setSelectedProject } = useProject();
-  setSelectedProject('dfc277bd-db24-4790-8c9f-853b15abbc01');
+  setSelectedProject('6d300cc8-2669-4313-ad0c-e0bc073b9139');
   // const { selectedProject } = useProject();
   const { id: routeChatId } = useParams();
   const {
