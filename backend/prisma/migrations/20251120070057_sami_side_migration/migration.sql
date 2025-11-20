@@ -12,7 +12,7 @@ ALTER TABLE IF EXISTS "public"."chat_messages" DROP CONSTRAINT "chat_messages_ch
 ALTER TABLE IF EXISTS "public"."chats" DROP CONSTRAINT "chats_spaceId_fkey";
 
 -- DropTable
-DROP TABLE IF EXISTS "public"."chat_messages" ;
+DROP TABLE IF EXISTS "public"."chat_messages";
 
 -- DropTable
 DROP TABLE IF EXISTS "public"."chats";

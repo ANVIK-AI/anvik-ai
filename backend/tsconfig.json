@@ -1,6 +1,6 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/services/auth.service.ts"],
   "exclude": [
     "node_modules",
     "dist",

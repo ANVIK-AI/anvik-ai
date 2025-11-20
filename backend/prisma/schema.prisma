@@ -15,28 +15,24 @@ datasource db {
 }
 
 model User {
-  id            Int     @id @default(autoincrement())
-  email         String  @unique
-  passwordHash  String
+  id            Int       @id @default(autoincrement())
+  googleId      String    @unique
+  email         String?   @unique
+  passwordHash  String?
   name          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  refreshTokens RefreshToken[]
+  displayName   String?
+  photo         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  refreshToken  String?
+  accessToken   String?
+  expiresAt     DateTime?
+  spaceIds       String[]    @default([])
 
   @@map("users")
 }
 
-model RefreshToken {
-  id        Int      @id @default(autoincrement())
-  tokenHash String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  revoked   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  expiresAt DateTime
 
-  @@map("refresh_tokens")
-}
 
 // Organization and User Management
 model OrganizationSettings {
@@ -67,6 +63,17 @@ model OrganizationSettings {
   updatedAt                   DateTime @updatedAt
 
   @@map("organization_settings")
+}
+model Session {
+  sid       String   @id
+  sess      Json     @db.JsonB
+  // Add this line if using PostgreSQL
+  expire    DateTime @db.Timestamp(6)
+  // Or use this for MySQL
+  // expire    DateTime @db.DateTime(6)
+
+  @@map("session")
+  @@index([expire], name: "IDX_session_expire")
 }
 
 // Connection Management

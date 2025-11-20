@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { uploadDocumentFile, updateDocumentMetadata,getDocumentsWithMemories } from "../controller/document.controller";
-
+import { isAuthenticated } from "../middleware/auth.middleware";
 const router = Router();
 
-router.post("/documents/documents", getDocumentsWithMemories);
-router.post("/v3/documents/file", uploadDocumentFile);
-router.patch("/v3/documents/:id", updateDocumentMetadata);
+router.post("/documents/documents", isAuthenticated, getDocumentsWithMemories);
+router.post("/v3/documents/file", isAuthenticated, uploadDocumentFile);
+router.patch("/v3/documents/:id", isAuthenticated, updateDocumentMetadata);
 
 export default router;
