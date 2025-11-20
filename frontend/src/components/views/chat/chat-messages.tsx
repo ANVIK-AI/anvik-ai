@@ -207,7 +207,6 @@ export function ChatMessages() {
     'gpt-5' | 'claude-sonnet-4.5' | 'gemini-2.5-pro'
   >(
     (sessionStorage.getItem(storageKey) as 'gpt-5' | 'claude-sonnet-4.5' | 'gemini-2.5-pro') ||
-      'gemini-2.5-pro' ||
       'gemini-2.5-pro',
   );
   const activeChatIdRef = useRef<string | null>(null);

@@ -649,7 +649,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
         1. After you get a JSON object from the 'search_memories' tool (e.g., { memories: [...] }), you MUST synthesize that information into a natural, conversational answer.
         2. Do NOT just list the memories or output the raw JSON.
         3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "your favorite sport is football.").
-        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't remember anything about that ,if you want me to remember please tell me."
+        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that. If you'd want me to remember something about this, please tell me."
         `,
     });
 

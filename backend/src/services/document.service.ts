@@ -233,7 +233,7 @@ export async function uploadDocumentFile({
   };
 
   // AI-generated title will be set by the worker after content extraction
-  const document = await prisma.document.create({
+  await prisma.document.create({
     data: {
       id,
       orgId,
@@ -247,8 +247,8 @@ export async function uploadDocumentFile({
   });
 
   // Link document to spaces
-  console.log('space ids: ', spaceIds);
-  console.log('document id: ', id);
+  // console.log('space ids: ', spaceIds);
+  // console.log('document id: ', id);
   for (const spaceId of spaceIds) {
     await prisma.documentsToSpaces.create({
       data: {
