@@ -3,14 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Brain, Mail, Lock } from 'lucide-react';
 import AuthShowcase from '@/components/AuthShowcase';
 import '../components/Auth.css';
-
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useAuth } from '@/context/AuthContext';
 function Login({ setIsAuthenticated, isAuthenticated }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
+  const {loginWithGoogle} =useAuth()
+  console.log(import.meta.env.VITE_PUBLIC_BACKEND_URL)
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/chat');
@@ -83,9 +85,17 @@ function Login({ setIsAuthenticated, isAuthenticated }: any) {
             />
           </div>
 
-          <button type="submit" className="auth-button" disabled={loading}>
+          <button type="submit" className="auth-button" onClick={()=>confirm(import.meta.env.VITE_PUBLIC_BACKEND_URL)} disabled={loading}>
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
+          <div 
+            onClick={loginWithGoogle}
+          className="flex items-center justify-center space-x-3 mt-6" style={{ color: 'rgba(0, 0, 0, 0.87)' }}>
+            <button className="bg-gray-100 rounded-full px-8 py-3 shadow-md hover:bg-gray-200">
+              <FontAwesomeIcon icon={["fab", "google"]} className="text-gray-800 mr-3" />
+              <span className="text-gray-800 text-sm font-medium">Sign up with Google</span>
+            </button>
+          </div>
 
           <div className="auth-footer">
             <p>

@@ -3,7 +3,7 @@
  * Handles all communication with the backend API
  */
 
-const BACKEND_URL = (import.meta.env?.VITE_BACKEND_URL || 'http://localhost:3000').replace(
+const BACKEND_URL = (import.meta.env?.VITE_PUBLIC_BACKEND_URL || 'http://localhost:3000').replace(
   /\/+$/,
   '',
 );
@@ -12,8 +12,8 @@ const BACKEND_URL = (import.meta.env?.VITE_BACKEND_URL || 'http://localhost:3000
 if (import.meta.env.DEV) {
   console.log('🔗 Backend URL:', BACKEND_URL);
   console.log(
-    '📝 Environment variable VITE_BACKEND_URL:',
-    import.meta.env?.VITE_BACKEND_URL || 'not set (using default)',
+    '📝 Environment variable VITE_PUBLIC_BACKEND_URL:',
+    import.meta.env?.VITE_PUBLIC_BACKEND_URL || 'not set (using default)',
   );
 }
 

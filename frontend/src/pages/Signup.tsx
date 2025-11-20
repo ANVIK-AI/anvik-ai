@@ -3,8 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Brain, Mail, Lock, User } from "lucide-react";
 import AuthShowcase from "../components/AuthShowcase";
 import "../components/Auth.css";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
+import { useAuth } from "@/context/AuthContext";
 function Signup({ setIsAuthenticated }: any) {
+  const {loginWithGoogle} =useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +41,7 @@ function Signup({ setIsAuthenticated }: any) {
   };
 
   return (
-    <div className="auth-page">
+    <div className="auth-page" style={{ height: "100vh", overflowY: "auto" }}>
       <AuthShowcase />
       <div className="auth-card glass-panel">
         <div className="auth-card__header">
@@ -117,6 +120,16 @@ function Signup({ setIsAuthenticated }: any) {
           <button type="submit" className="auth-button" disabled={loading}>
             {loading ? "Creating account..." : "Sign up"}
           </button>
+          
+          <div 
+            onClick={loginWithGoogle}
+          className="flex items-center justify-center space-x-3 mt-6" style={{ color: 'rgba(0, 0, 0, 0.87)' }}>
+            <button className="bg-gray-100 rounded-full px-8 py-3 shadow-md hover:bg-gray-200">
+              <FontAwesomeIcon icon={["fab", "google"]} className="text-gray-800 mr-3" />
+              <span className="text-gray-800 text-sm font-medium">Sign up with Google</span>
+            </button>
+          </div>
+
 
           <div className="auth-footer">
             <p>

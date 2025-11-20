@@ -1,4 +1,5 @@
 import './App.css';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { DocumentRoutesTester } from './pages/document-routes-tester';
 import { ChatTester } from './pages/chatTester';
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom';
@@ -12,6 +13,13 @@ import { authAPI } from './services/api';
 import PortfolioHome from './pages/PortfolioHome';
 import ThreeBackground from './ui/components/ThreeBackground';
 import Signup from './pages/Signup';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { fas } from '@fortawesome/free-solid-svg-icons'
+import { far } from '@fortawesome/free-regular-svg-icons'
+import { fab } from '@fortawesome/free-brands-svg-icons'
+
+library.add(fas, far, fab)
 
 function App() {
   const [showTestPage, setShowTestPage] = useState(true);
@@ -53,6 +61,8 @@ function App() {
 
   return (
     <div className="app-shell h-screen flex flex-col">
+      <AuthProvider>
+
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<PortfolioHome />} />
@@ -91,6 +101,8 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </AuthProvider>
+
     </div>
   );
 }
