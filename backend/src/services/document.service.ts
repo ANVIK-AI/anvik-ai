@@ -219,7 +219,6 @@ export async function uploadDocumentFile({
     } else {
       console.log('space id already present: ', space);
     }
-    console.log('here it is ');
     spaceIds.push(space.id);
   }
 

@@ -186,8 +186,6 @@ export async function registerWorkers() {
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const embedder = genAI.getGenerativeModel({ model: embeddingModelName() });
 
-        //TODO: currently we parse the ai response to a json,but the ai sdk provides generateObject method which directly returns json,we need to update to use that
-        //ref: readme file of https://github.com/vercel/ai?tab=readme-ov-file
         const prompt = `
           You are analyzing a document to extract essential information for a personal AI assistant memory system.
 
@@ -259,7 +257,7 @@ export async function registerWorkers() {
               summary: z.string(),
               memories: z.array(z.string()),
             }),
-            prompt: prompt,
+            prompt,
           });
 
           console.log(
@@ -268,10 +266,9 @@ export async function registerWorkers() {
 
           // Validate required fields
           if (
-            !object.title ||
-            !object.summary ||
-            !object.memories ||
-            !Array.isArray(object.memories)
+            object.title.length === 0 ||
+            object.summary.length === 0 ||
+            object.memories.length <= 0
           ) {
             console.error('Missing required fields in generated object:', object);
             await generateFallbackContent(documentId, doc, spaceId, model, embedder);
@@ -367,14 +364,12 @@ export async function registerWorkers() {
           console.log(
             `[${new Date().toISOString()}] Completed memory extraction. Created ${createdMemories} memories.`,
           );
-          return;
         } catch (error) {
           console.error(
             `[${new Date().toISOString()}] Error in extract_document_essentials:`,
             error,
           );
           await generateFallbackContent(documentId, doc, spaceId, model, embedder);
-          return;
         }
       });
 
