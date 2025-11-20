@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { PDFParse } from 'pdf-parse';
 import path from 'path';
 import { TaskType } from '@google/generative-ai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import { google } from '@ai-sdk/google';
 
 import { createRequire } from 'module';
 // import { title } from 'process'
@@ -183,14 +186,16 @@ export async function registerWorkers() {
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const embedder = genAI.getGenerativeModel({ model: embeddingModelName() });
 
+        //TODO: currently we parse the ai response to a json,but the ai sdk provides generateObject method which directly returns json,we need to update to use that
+        //ref: readme file of https://github.com/vercel/ai?tab=readme-ov-file
         const prompt = `
           You are analyzing a document to extract essential information for a personal AI assistant memory system.
 
           **TASK:** Extract the following components in a SINGLE JSON response:
 
-          1. **Title**: A descriptive, professional title (5-10 words) that captures the document's essence
-          2. **Summary**: A concise 2-4 sentence summary focusing on key facts, experiences, and achievements
-          3. **Memories**: 15-25 concise, atomic factual statements that represent key information worth remembering
+          1. **title**: A descriptive, professional title (5-10 words) that captures the document's essence
+          2. **summary**: A concise 2-4 sentence summary focusing on key facts, experiences, and achievements
+          3. **memories**: 15-25 concise, atomic factual statements that represent key information worth remembering
 
           **CRITICAL GUIDELINES FOR MEMORIES:**
 
@@ -244,66 +249,47 @@ export async function registerWorkers() {
           ${doc.content.substring(0, Math.min(doc.content.length, 15000))}
           ---
 
-          Remember: Return ONLY valid JSON, no markdown, no explanations. Focus on extracting ALL important factual information.
+          Remember: Focus on extracting ALL important factual information.
           `;
-
         try {
-          console.log(`[${new Date().toISOString()}] Generating document essentials`);
-          const { response } = await model.generateContent(prompt);
-          const text = response.text().trim();
+          const { object } = await generateObject({
+            model: google('gemini-2.5-flash'),
+            schema: z.object({
+              title: z.string(),
+              summary: z.string(),
+              memories: z.array(z.string()),
+            }),
+            prompt: prompt,
+          });
 
-          let parsed;
-          try {
-            parsed = JSON.parse(text);
-          } catch (parseError) {
-            console.log(parseError);
-            console.error('Failed to parse AI response as JSON, attempting cleanup:', text);
-            // Try to extract JSON from malformed response
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                parsed = JSON.parse(jsonMatch[0]);
-              } catch (secondError) {
-                console.error('Second JSON parse attempt failed:', secondError);
-                await generateFallbackContent(documentId, doc, spaceId, model, embedder);
-                return;
-              }
-            } else {
-              await generateFallbackContent(documentId, doc, spaceId, model, embedder);
-              return;
-            }
-          }
+          console.log(
+            `[${new Date().toISOString()}] Successfully generated document essentials using generateObject for document ${documentId}`,
+          );
 
           // Validate required fields
           if (
-            !parsed.title ||
-            !parsed.summary ||
-            !parsed.memories ||
-            !Array.isArray(parsed.memories)
+            !object.title ||
+            !object.summary ||
+            !object.memories ||
+            !Array.isArray(object.memories)
           ) {
-            console.error('Missing required fields in parsed response:', parsed);
+            console.error('Missing required fields in generated object:', object);
             await generateFallbackContent(documentId, doc, spaceId, model, embedder);
             return;
           }
-
-          console.log(`[${new Date().toISOString()}] Successfully parsed analysis:`, {
-            title: parsed.title,
-            summaryLength: parsed.summary?.length,
-            memoriesCount: parsed.memories?.length,
-          });
 
           // Update document with title and summary
           await prisma.document.update({
             where: { id: documentId },
             data: {
-              title: parsed.title.trim(),
-              summary: parsed.summary.trim(),
+              title: object.title.trim(),
+              summary: object.summary.trim(),
             },
           });
 
           // Embed and store summary
           try {
-            const summaryEmbedding = await embedder.embedContent(parsed.summary);
+            const summaryEmbedding = await embedder.embedContent(object.summary);
             await prisma.document.update({
               where: { id: documentId },
               data: {
@@ -316,7 +302,7 @@ export async function registerWorkers() {
           }
 
           // Process memories
-          const validMemories = parsed.memories
+          const validMemories = object.memories
             .filter((memory: string) => memory && memory.trim() && memory.length > 10)
             .slice(0, 30); // Limit to prevent overflow
 
@@ -381,14 +367,156 @@ export async function registerWorkers() {
           console.log(
             `[${new Date().toISOString()}] Completed memory extraction. Created ${createdMemories} memories.`,
           );
+          return;
         } catch (error) {
-          console.error(
-            `[${new Date().toISOString()}] Error in extract_document_essentials:`,
-            error,
-          );
+          console.error('Error preparing prompt for document essentials extraction:', error);
           await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+          return;
         }
+
+        // try {
+        //   console.log(`[${new Date().toISOString()}] Generating document essentials`);
+        //   const { response } = await model.generateContent(prompt);
+        //   const text = response.text().trim();
+
+        //   let parsed;
+        //   try {
+        //     parsed = JSON.parse(text);
+        //   } catch (parseError) {
+        //     console.log(parseError);
+        //     console.error('Failed to parse AI response as JSON, attempting cleanup:', text);
+        //     // Try to extract JSON from malformed response
+        //     const jsonMatch = text.match(/\{[\s\S]*\}/);
+        //     if (jsonMatch) {
+        //       try {
+        //         parsed = JSON.parse(jsonMatch[0]);
+        //       } catch (secondError) {
+        //         console.error('Second JSON parse attempt failed:', secondError);
+        //         await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+        //         return;
+        //       }
+        //     } else {
+        //       await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+        //       return;
+        //     }
+        //   }
+
+        //   // Validate required fields
+        //   if (
+        //     !parsed.title ||
+        //     !parsed.summary ||
+        //     !parsed.memories ||
+        //     !Array.isArray(parsed.memories)
+        //   ) {
+        //     console.error('Missing required fields in parsed response:', parsed);
+        //     await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+        //     return;
+        //   }
+
+        //   console.log(`[${new Date().toISOString()}] Successfully parsed analysis:`, {
+        //     title: parsed.title,
+        //     summaryLength: parsed.summary?.length,
+        //     memoriesCount: parsed.memories?.length,
+        //   });
+
+        //   // Update document with title and summary
+        //   await prisma.document.update({
+        //     where: { id: documentId },
+        //     data: {
+        //       title: parsed.title.trim(),
+        //       summary: parsed.summary.trim(),
+        //     },
+        //   });
+
+        //   // Embed and store summary
+        //   try {
+        //     const summaryEmbedding = await embedder.embedContent(parsed.summary);
+        //     await prisma.document.update({
+        //       where: { id: documentId },
+        //       data: {
+        //         summaryEmbedding: JSON.stringify(summaryEmbedding.embedding.values),
+        //         summaryEmbeddingModel: embeddingModelName(),
+        //       },
+        //     });
+        //   } catch (embedError) {
+        //     console.error('Failed to embed summary:', embedError);
+        //   }
+
+        //   // Process memories
+        //   const validMemories = parsed.memories
+        //     .filter((memory: string) => memory && memory.trim() && memory.length > 10)
+        //     .slice(0, 30); // Limit to prevent overflow
+
+        //   console.log(
+        //     `[${new Date().toISOString()}] Processing ${validMemories.length} valid memories`,
+        //   );
+
+        //   // Create memory entries with batching
+        //   const BATCH_SIZE = 3;
+        //   let createdMemories = 0;
+
+        //   for (let i = 0; i < validMemories.length; i += BATCH_SIZE) {
+        //     const batch = validMemories.slice(i, i + BATCH_SIZE);
+        //     const batchPromises = batch.map(async (memory: string) => {
+        //       try {
+        //         const emb = await embedder.embedContent(memory);
+        //         const memoryId = uuidv4();
+
+        //         await prisma.memoryEntry.create({
+        //           data: {
+        //             id: memoryId,
+        //             memory: memory.trim(),
+        //             spaceId: spaceId,
+        //             orgId: doc.orgId,
+        //             userId: doc.userId,
+        //             version: 1,
+        //             isLatest: true,
+        //             isInference: false,
+        //             memoryEmbedding: JSON.stringify(emb.embedding.values),
+        //             memoryEmbeddingModel: embeddingModelName(),
+        //             metadata: {
+        //               source: 'document_extraction',
+        //               documentId: documentId,
+        //             },
+        //           },
+        //         });
+
+        //         await prisma.memoryDocumentSource.create({
+        //           data: {
+        //             memoryEntryId: memoryId,
+        //             documentId,
+        //             relevanceScore: 100,
+        //           },
+        //         });
+
+        //         createdMemories++;
+        //         return memoryId;
+        //       } catch (error) {
+        //         console.error(`Error creating memory for: ${memory.substring(0, 100)}`, error);
+        //         return null;
+        //       }
+        //     });
+
+        //     await Promise.all(batchPromises);
+
+        //     // Rate limiting between batches
+        //     if (i + BATCH_SIZE < validMemories.length) {
+        //       await new Promise((resolve) => setTimeout(resolve, 200));
+        //     }
+        //   }
+
+        //   console.log(
+        //     `[${new Date().toISOString()}] Completed memory extraction. Created ${createdMemories} memories.`,
+        //   );
+        // } catch (error) {
+        //   console.error(
+        //     `[${new Date().toISOString()}] Error in extract_document_essentials:`,
+        //     error,
+        //   );
+        //   await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+        // }
       });
+
       console.log('done...');
       await finalize(documentId, 'done');
     } catch (err) {

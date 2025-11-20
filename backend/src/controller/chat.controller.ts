@@ -576,9 +576,9 @@ export async function chatRequestWithID(req: Request, res: Response) {
             score: mem.score,
           }));
 
-          console.log(
-            `[Memory Search] Dynamic Selection => quality=${quality.toFixed(3)} topScore=${topScore.toFixed(3)} chosenCount=${chosenCount} scores=[${scores.map((s) => s.toFixed(2)).join(', ')}]`,
-          );
+          // console.log(
+          //   `[Memory Search] Dynamic Selection => quality=${quality.toFixed(3)} topScore=${topScore.toFixed(3)} chosenCount=${chosenCount} scores=[${scores.map((s) => s.toFixed(2)).join(', ')}]`,
+          // );
 
           return {
             count: dynamicMemories.length,
@@ -634,7 +634,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
       model: google('gemini-2.5-flash'),
       messages: convertToModel,
       tools: tools,
-      maxSteps: 5, // allow the model to call tools and then produce a concluding assistant message
+      maxSteps: 5,
       system: `You are a helpful assistant with access to the user's personal memories.
 
         [Current Date & Time]: ${now}
@@ -649,7 +649,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
         1. After you get a JSON object from the 'search_memories' tool (e.g., { memories: [...] }), you MUST synthesize that information into a natural, conversational answer.
         2. Do NOT just list the memories or output the raw JSON.
         3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "your favorite sport is football.").
-        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that."
+        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't remember anything about that ,if you want me to remember please tell me."
         `,
     });
 
