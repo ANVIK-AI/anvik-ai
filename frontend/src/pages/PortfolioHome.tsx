@@ -4,8 +4,10 @@ import { Brain, ArrowRight, Menu, X } from 'lucide-react';
 import PortfolioBackground from '../ui/components/PortfolioBackground';
 import LoadingScreen from '../ui/components/LoadingScreen';
 import './PortfolioHome.css';
+import { useAuth } from '@/context/AuthContext';
 
 function PortfolioHome() {
+  const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -19,6 +21,7 @@ function PortfolioHome() {
     { label: 'About', href: '#about' },
     { label: 'Contact', href: '#contact' },
   ];
+
 
   return (
     <>
@@ -48,10 +51,15 @@ function PortfolioHome() {
             ))}
           </div>
           <div className="nav-actions">
-            <Link to="/login" className="nav-link">
+            {
+              !isAuthenticated &&  (
+                <Link to="/login" className="nav-link">
               Sign In
             </Link>
-            <Link to="/signup" className="nav-button">
+              ) 
+            }
+            
+            <Link to={ isAuthenticated ? '/chat': '/signin'} className="nav-button">
               Get Started
               <ArrowRight size={16} />
             </Link>

@@ -13,6 +13,7 @@ import { usePersistentChat } from '@/stores/chat';
 import { useGraphHighlights } from '@/stores/highlights';
 import { Spinner } from '../../spinner';
 import { nanoid } from 'nanoid';
+import { useAuth } from '@/context/AuthContext';
 
 interface MemoryResult {
   documentId?: string;
@@ -186,8 +187,10 @@ function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
 }
 
 export function ChatMessages() {
+  const {user}=useAuth();
   //TODO:use this method to set the project id to pass it to backend
   const { selectedProject, setSelectedProject } = useProject();
+
   setSelectedProject('93c73846-5c10-4325-968e-41be4baa2dbd');
   // const { selectedProject } = useProject();
   const { id: routeChatId } = useParams();
@@ -244,6 +247,8 @@ export function ChatMessages() {
         return fetch(url, {
           ...options,
           body: requestBody,
+          credentials: 'include',
+          
           headers,
           // include cookies if backend uses them; harmless otherwise
           // credentials: (options as any)?.credentials ?? "include",
@@ -335,6 +340,7 @@ export function ChatMessages() {
         const res = await fetch(url, {
           method: 'POST',
           headers,
+          credentials: 'include',
           body: JSON.stringify(payload),
           signal,
         });

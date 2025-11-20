@@ -18,10 +18,11 @@ import { ScrollArea } from '@ui/components/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@lib/utils';
 import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 
 export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
-
+  const {user, logout} =useAuth();
   const navigate = useNavigate();
 
   const router = {
@@ -206,6 +207,47 @@ export function Header({ onAddMemory }: { onAddMemory?: () => void }) {
               <p>Graph View</p>
             </TooltipContent>
           </Tooltip>
+
+          <div className="relative">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="relative inline-flex items-center justify-center rounded-full border  bg-white  text-foreground hover:border-white/10 hover:bg-white/10"
+                >
+                  <img
+                    className="h-8 w-8 rounded-full"
+                    src={user?.photo || ''}
+                    alt="User Avatar"
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="bg-gray-900 text-white p-2 shadow-xl rounded-xl mt-4 mr-1">
+                <div className="flex flex-col items-start gap-1">
+                  <div className="flex items-center gap-2">
+                    <img
+                      className="h-6 w-6 rounded-full"
+                      src={user?.photo || ''}
+                      alt="User Avatar"
+                      // style={{ filter: 'invert(1)' }}
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-white">{user?.displayName}</span>
+                      <span className="text-xs text-gray-400">{user?.email}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full border-dashed bg-black"
+                    onClick={logout}
+                  >
+                    <span className="text-xs text-gray-400">Logout</span>
+                  </Button>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </div>
     </div>

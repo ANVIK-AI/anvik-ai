@@ -41,6 +41,7 @@ export function GraphDialog() {
 		initialPageParam: 1,
 		queryFn: async ({ pageParam }) => {
 			const response = await $fetch("@post/documents/documents", {
+				credentials: 'include',
 				body: {
 					page: pageParam as number,
 					limit: (pageParam as number) === 1 ? (IS_DEV ? 500 : 500) : PAGE_SIZE,
@@ -119,6 +120,7 @@ export function GraphDialog() {
 		const run = async () => {
 			try {
 				const resp = await $fetch("@post/documents/documents/by-ids", {
+					credentials: 'include',
 					body: {
 						ids: missing,
 						by: "customId",

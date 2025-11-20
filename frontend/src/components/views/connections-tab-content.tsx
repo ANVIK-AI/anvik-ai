@@ -81,6 +81,7 @@ export function ConnectionsTabContent() {
     queryKey: ['connections'],
     queryFn: async () => {
       const response = await $fetch('@post/connections/list', {
+        credentials: 'include',
         body: {
           containerTags: [],
         },
@@ -116,6 +117,7 @@ export function ConnectionsTabContent() {
       }
 
       const response = await $fetch('@post/connections/:provider', {
+        credentials: 'include',
         params: { provider },
         body: {
           redirectUrl: window.location.href,

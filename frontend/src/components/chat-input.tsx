@@ -2,9 +2,11 @@ import { useState, useEffect } from "react"
 import { generateId } from "@lib/generate-id"
 import { usePersistentChat } from "@/stores/chat"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/context/AuthContext"
 
 
 export function ChatInput() {
+	const {user} =useAuth()
 	const navigate = useNavigate()
 	const [message, setMessage] = useState("")
 	const [selectedModel, setSelectedModel] = useState<
@@ -52,7 +54,7 @@ export function ChatInput() {
 			<div className="w-full max-w-4xl">
 				<div className="text-start mb-4">
 					<h2 className="text-3xl font-bold text-foreground text-slate-900">
-						Welcome, <span className="text-primary">User</span>
+						Welcome, <span className="text-primary">{user?.displayName}</span>
 					</h2>
 				</div>
 				<div className="relative">

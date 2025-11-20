@@ -73,6 +73,7 @@ export const authAPI = {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ name, email, password }),
       });
       const data = await handleResponse(response);
@@ -96,6 +97,7 @@ export const authAPI = {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
       const data = await handleResponse(response);

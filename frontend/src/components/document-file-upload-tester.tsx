@@ -26,6 +26,7 @@ export function DocumentFileUploadTester() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      // formData.append('id', 1);
 
       if (containerTags.trim()) {
         formData.append('containerTags', containerTags);
@@ -34,7 +35,7 @@ export function DocumentFileUploadTester() {
       console.log('🚀 Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
 
       const startTime = Date.now();
-      const res = await fetch('http://localhost:4000/v3/documents/file', {
+      const res = await fetch(`${import.meta.env.VITE_PUBLIC_BACKEND_URL}/v3/documents/file`, {
         method: 'POST',
         body: formData,
         credentials: 'include',

@@ -1,3 +1,4 @@
+import { useAuth } from '@/context/AuthContext';
 import { useState, useRef } from 'react';
 
 interface Message {
@@ -9,6 +10,7 @@ interface Message {
 //
 
 export function ChatTester() {
+  const {user}= useAuth();
   const generateId = () => {
     try {
       // @ts-ignore
@@ -61,6 +63,7 @@ export function ChatTester() {
           })),
           metadata: {
             projectId: projectId,
+            id:user?.id
           },
         }),
       });
