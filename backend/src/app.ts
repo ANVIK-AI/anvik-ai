@@ -34,7 +34,7 @@ const corsOptions: cors.CorsOptions = {
 
 const app = express();
 
-// Local file storage for demo purposes. Replace with S3/GCS in prod.
+//TODO: Local file storage for demo purposes. Replace with S3/GCS in prod.
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 

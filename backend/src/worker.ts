@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { PDFParse } from 'pdf-parse';
 import path from 'path';
 import { TaskType } from '@google/generative-ai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import { google } from '@ai-sdk/google';
 
 import { createRequire } from 'module';
 // import { title } from 'process'
@@ -188,9 +191,9 @@ export async function registerWorkers() {
 
           **TASK:** Extract the following components in a SINGLE JSON response:
 
-          1. **Title**: A descriptive, professional title (5-10 words) that captures the document's essence
-          2. **Summary**: A concise 2-4 sentence summary focusing on key facts, experiences, and achievements
-          3. **Memories**: 15-25 concise, atomic factual statements that represent key information worth remembering
+          1. **title**: A descriptive, professional title (5-10 words) that captures the document's essence
+          2. **summary**: A concise 2-4 sentence summary focusing on key facts, experiences, and achievements
+          3. **memories**: 15-25 concise, atomic factual statements that represent key information worth remembering
 
           **CRITICAL GUIDELINES FOR MEMORIES:**
 
@@ -244,66 +247,46 @@ export async function registerWorkers() {
           ${doc.content.substring(0, Math.min(doc.content.length, 15000))}
           ---
 
-          Remember: Return ONLY valid JSON, no markdown, no explanations. Focus on extracting ALL important factual information.
+          Remember: Focus on extracting ALL important factual information.
           `;
-
         try {
-          console.log(`[${new Date().toISOString()}] Generating document essentials`);
-          const { response } = await model.generateContent(prompt);
-          const text = response.text().trim();
+          const { object } = await generateObject({
+            model: google('gemini-2.5-flash'),
+            schema: z.object({
+              title: z.string(),
+              summary: z.string(),
+              memories: z.array(z.string()),
+            }),
+            prompt,
+          });
 
-          let parsed;
-          try {
-            parsed = JSON.parse(text);
-          } catch (parseError) {
-            console.log(parseError);
-            console.error('Failed to parse AI response as JSON, attempting cleanup:', text);
-            // Try to extract JSON from malformed response
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                parsed = JSON.parse(jsonMatch[0]);
-              } catch (secondError) {
-                console.error('Second JSON parse attempt failed:', secondError);
-                await generateFallbackContent(documentId, doc, spaceId, model, embedder);
-                return;
-              }
-            } else {
-              await generateFallbackContent(documentId, doc, spaceId, model, embedder);
-              return;
-            }
-          }
+          console.log(
+            `[${new Date().toISOString()}] Successfully generated document essentials using generateObject for document ${documentId}`,
+          );
 
           // Validate required fields
           if (
-            !parsed.title ||
-            !parsed.summary ||
-            !parsed.memories ||
-            !Array.isArray(parsed.memories)
+            object.title.length === 0 ||
+            object.summary.length === 0 ||
+            object.memories.length <= 0
           ) {
-            console.error('Missing required fields in parsed response:', parsed);
+            console.error('Missing required fields in generated object:', object);
             await generateFallbackContent(documentId, doc, spaceId, model, embedder);
             return;
           }
-
-          console.log(`[${new Date().toISOString()}] Successfully parsed analysis:`, {
-            title: parsed.title,
-            summaryLength: parsed.summary?.length,
-            memoriesCount: parsed.memories?.length,
-          });
 
           // Update document with title and summary
           await prisma.document.update({
             where: { id: documentId },
             data: {
-              title: parsed.title.trim(),
-              summary: parsed.summary.trim(),
+              title: object.title.trim(),
+              summary: object.summary.trim(),
             },
           });
 
           // Embed and store summary
           try {
-            const summaryEmbedding = await embedder.embedContent(parsed.summary);
+            const summaryEmbedding = await embedder.embedContent(object.summary);
             await prisma.document.update({
               where: { id: documentId },
               data: {
@@ -316,7 +299,7 @@ export async function registerWorkers() {
           }
 
           // Process memories
-          const validMemories = parsed.memories
+          const validMemories = object.memories
             .filter((memory: string) => memory && memory.trim() && memory.length > 10)
             .slice(0, 30); // Limit to prevent overflow
 
@@ -389,6 +372,7 @@ export async function registerWorkers() {
           await generateFallbackContent(documentId, doc, spaceId, model, embedder);
         }
       });
+
       console.log('done...');
       await finalize(documentId, 'done');
     } catch (err) {

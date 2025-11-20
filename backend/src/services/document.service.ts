@@ -175,15 +175,15 @@ export async function getDocumentsWithMemories(input: QueryInput) {
   };
 }
 
-// function inferTypeFromMime(mime: string) {
-//   if (mime.includes('pdf')) return 'pdf'
-//   if (mime.includes('wordprocessingml') || mime.includes('msword')) return 'text' // doc/docx => text after conversion
-//   if (mime.startsWith('image/')) return 'image'
-//   if (mime.includes('csv')) return 'text'
-//   if (mime.includes('json')) return 'text'
-//   if (mime.includes('markdown') || mime.includes('text')) return 'text'
-//   return 'text'
-// }
+function inferTypeFromMime(mime: string) {
+  if (mime.includes('pdf')) return 'pdf';
+  if (mime.includes('wordprocessingml') || mime.includes('msword')) return 'text'; // doc/docx => text after conversion
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.includes('csv')) return 'text';
+  if (mime.includes('json')) return 'text';
+  if (mime.includes('markdown') || mime.includes('text')) return 'text';
+  return 'text';
+}
 
 export async function uploadDocumentFile({
   file,
@@ -216,35 +216,38 @@ export async function uploadDocumentFile({
           isExperimental: false,
         },
       });
+    } else {
+      console.log('space id already present: ', space);
     }
-    console.log('here it is ');
     spaceIds.push(space.id);
   }
 
   // Insert document stub with status queued
   const id = uuidv4();
-  // const type = inferTypeFromMime(file.mimetype)
-  // const metadata = {
-  //   sm_internal_fileName: file.originalname,
-  //   sm_internal_fileSize: file.size,
-  //   sm_internal_fileType: file.mimetype,
-  // }
+  const type = inferTypeFromMime(file.mimetype);
+  const metadata = {
+    sm_internal_fileName: file.originalname,
+    sm_internal_fileSize: file.size,
+    sm_internal_fileType: file.mimetype,
+  };
 
   // AI-generated title will be set by the worker after content extraction
-  // const document = await prisma.document.create({
-  //   data: {
-  //     id,
-  //     orgId,
-  //     userId,
-  //     title: file.originalname,
-  //     type,
-  //     status: 'queued',
-  //     metadata,
-  //     processingMetadata: { startTime: Date.now(), steps: [] },
-  //   },
-  // })
+  await prisma.document.create({
+    data: {
+      id,
+      orgId,
+      userId,
+      title: file.originalname,
+      type,
+      status: 'queued',
+      metadata,
+      processingMetadata: { startTime: Date.now(), steps: [] },
+    },
+  });
 
   // Link document to spaces
+  // console.log('space ids: ', spaceIds);
+  // console.log('document id: ', id);
   for (const spaceId of spaceIds) {
     await prisma.documentsToSpaces.create({
       data: {
