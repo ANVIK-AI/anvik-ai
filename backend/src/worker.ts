@@ -456,9 +456,7 @@ async function generateFallbackContent(
   }
 }
 
-
 async function extractText(documentId: string): Promise<{ text: string; type: string }> {
-  // Fetch document from DB
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
     select: { raw: true, metadata: true },
@@ -472,11 +470,13 @@ async function extractText(documentId: string): Promise<{ text: string; type: st
 
   try {
     if (mime?.includes('pdf')) {
-      // Cross-platform safe path to pdfjs standard fonts
-      const standardFontDataUrl = join(
-        __dirname,
-        '../node_modules/pdfjs-dist/standard_fonts/'
-      ).replace(/\\/g, '/'); // ensures forward slashes for pdfjs
+      let standardFontDataUrl = path.join(
+        path.dirname(require.resolve('pdfjs-dist/package.json')),
+        'standard_fonts/',
+      );
+
+      // Convert Windows backslashes to forward slashes for pdfjs
+      standardFontDataUrl = standardFontDataUrl.replace(/\\/g, '/');
 
       const parser = new PDFParse({ data: raw, standardFontDataUrl });
       const result = await parser.getText();
@@ -484,14 +484,13 @@ async function extractText(documentId: string): Promise<{ text: string; type: st
       return { text: result.text, type: 'text' };
     }
 
-    // Fallback for non-PDF files
+    // fallback for non-PDFs
     return { text: raw.toString('utf8'), type: 'text' };
   } catch (error) {
     console.error('Error extracting text:', error);
     return { text: '', type: 'text' };
   }
 }
-
 async function getDoc(documentId: string) {
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
