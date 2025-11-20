@@ -5,6 +5,9 @@ import prisma from '../db/prismaClient';
 import { z } from 'zod';
 import { MemoryService } from '../services/chat.service';
 import { convertToModelMessages } from 'ai';
+import { getEmails, sendEmail, getEmailDetails } from "../agents/email.agent"
+import { getCalendarEvents, setCalendarEvent, setBirthdayEvent,  listCalendarTasks, setCalendarTask } from "../agents/calendar.agent"
+
 
 const chatRequestSchema = z.object({
   messages: z.array(z.any()),
@@ -20,251 +23,15 @@ const titleRequestSchema = z.object({
 
 const memoryService = new MemoryService();
 
-// interface MemoryResult {
-//   documentId?: string;
-//   title?: string;
-//   content?: string;
-//   url?: string;
-//   score?: number;
-// }
-
-// interface SearchMemoriesOutput {
-//   count: number;
-//   results: MemoryResult[];
-// }
-
-// interface AddMemoryOutput {
-//   success: boolean;
-//   memoryId?: string;
-// }
-
-// export async function chatRequest(req: Request, res: Response) {
-//   try {
-//     const { messages, metadata } = chatRequestSchema.parse(req.body);
-//     const { projectId } = metadata;
-
-//     // Verify the project/space exists
-//     const space = await prisma.space.findUnique({
-//       where: { id: projectId }
-//     });
-
-//     if (!space) {
-//       return res.status(404).json({ error: 'Project not found' });
-//     }
-
-//     const tools = {
-//       search_memories: tool({
-//         name: 'search_memories',
-//         description: 'Search user memories and patterns. Run when explicitly asked or when context about user\'s past choices would be helpful. Uses semantic matching to find relevant details across related experiences.',
-//         inputSchema: z.object({
-//           informationToGet: z.string().describe('The information to search for in the user\'s memories.')
-//         }),
-//         execute: async ({ informationToGet }: { informationToGet: string }) => {
-//           console.log(`[Memory Search] Query: ${informationToGet}, Project: ${projectId}`);
-//           const response = await memoryService.searchMemories(informationToGet, projectId);
-
-//           // Process and format the memories
-//           if (!response.success || !response.results || response.results.length === 0) {
-//             return { memories: [], note: 'No relevant memories found.' };
-//           }
-//           // Take top 3 most relevant memories
-//           const topMemories = response.results.slice(0, 3).map(mem => ({
-//             title: mem.title,
-//             content: mem.content,
-//             relevance: Math.round((mem.score || 0) * 100)
-//           }));
-
-//           console.log(`[Memory Search] Top Memories: ${JSON.stringify(topMemories)}`);
-
-//           return { memories: topMemories };
-//         }
-//       }),
-
-//       add_memory: tool({
-//         name: 'add_memory',
-//         description: 'Add a new memory to the user\'s memories. Run when explicitly asked or when the user mentions any information generalizable beyond the context of the current conversation.',
-//         inputSchema: z.object({
-//           memory: z.string().describe('The memory to add.')
-//         }),
-//         execute: async ({ memory }: { memory: string }) => {
-//           console.log(`[Memory Add] Memory: ${memory}, Project: ${projectId}`);
-//           return await memoryService.addMemory(memory, projectId);
-//         }
-//       }),
-
-//       fetch_memory: tool({
-//         name: 'fetch_memory',
-//         description: 'Fetch a specific memory by ID to get its full details.',
-//         inputSchema: z.object({
-//           memoryId: z.string().describe('The ID of the memory to fetch.')
-//         }),
-//         execute: async ({ memoryId }: { memoryId: string }) => {
-//           console.log(`[Memory Fetch] ID: ${memoryId}, Project: ${projectId}`);
-//           return await memoryService.fetchMemory(memoryId, projectId);
-//         }
-//       }),
-//     };
-
-//     const result = await streamText({
-//       model: google('gemini-2.5-pro'),
-//       messages,
-//       tools: tools,
-//       maxSteps: 5,
-//       system: `You are a helpful assistant with access to the user's personal memories.
-
-//       When answering questions:
-
-//       For general knowledge questions, use your own knowledge directly
-//       Use search/add memory tools when the question relates to the user's personal information, preferences, or past experiences
-//       Always provide a helpful response even if no relevant memories are found
-//       You must always say something when you call a tool to explain what you're doing.
-
-//       [IMPORTANT] How to use 'search_memories' tool results:
-//       1. After you get a JSON object from the 'search_memories' tool (e.g., { memories: [...] }), you MUST synthesize that information into a natural, conversational answer.
-//       2. Do NOT just list the memories or output the raw JSON.
-//       3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "Based on your memories, it looks like your favorite sport is football.").
-//       4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that."
-//       `
-//     });
-
-//     // Set headers for streaming response
-//     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-//     res.setHeader('Transfer-Encoding', 'chunked');
-//     res.setHeader('Cache-Control', 'no-cache');
-//     res.setHeader('Connection', 'keep-alive');
-//     // Flush headers so browsers start rendering stream immediately
-//     const resAny = res as any;
-//     if (typeof resAny.flushHeaders === 'function') {
-//       resAny.flushHeaders();
-//     }
-//     // Kickstart the stream to avoid buffering in some proxies/browsers
-//     res.write('\n');
-
-//     // Pipe the stream to the response and track if any content was sent
-//     let anyTextSent = false;
-//     let accumulated = '';
-
-//     // Iterate over the full stream to handle text, tool calls, and final response
-//     for await (const part of result.fullStream) {
-//       switch (part.type) {
-//         case 'text-delta': {
-//           const chunk = part.text;
-//           if (chunk && chunk.length > 0) {
-//             anyTextSent = true;
-//             accumulated += chunk;
-//             res.write(chunk);
-//           }
-//           break;
-//         }
-
-//         case 'tool-call': {
-//           // Log when the tool call starts
-//           console.log(
-//             `[Tool Call] Calling ${part.toolName} with input:`,
-//             part.input,
-//           );
-//           break;
-//         }
-
-//         case 'tool-result': {
-//           // Log when the tool result is available
-//           const resultStr = part.result ? JSON.stringify(part.result) : 'undefined';
-//           console.log(`[Tool Result] ${part.toolName} finished with result:`, resultStr.substring(0, 200));
-//           break;
-//         }
-
-//         case 'finish': {
-//           // Log when the model finishes
-//           console.log(`[Stream Finish] Reason: ${part.finishReason}`);
-//           break;
-//         }
-//       }
-//     }
-
-//     // Fallback: if model produced no or too-short text, synthesize a brief answer from memory search
-//     // const shouldUseFallback = !anyTextSent || (accumulated.trim().length < 40);
-//     // console.log('[Fallback]', {
-//     //   anyTextSent,
-//     //   accumulatedLength: accumulated.trim().length,
-//     //   shouldUseFallback,
-//     //   firstChunk: accumulated.substring(0, 50) + (accumulated.length > 50 ? '...' : '')
-//     // });
-
-//     // if (shouldUseFallback) {
-//     //   try {
-//     //     const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
-//     //     const query = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-
-//     //     console.log('[Memory Search] Query:', query);
-//     //     const search = query ? await memoryService.searchMemories(query, projectId) : { success: false, count: 0, results: [] };
-//     //     console.log('[Memory Search] Results:', {
-//     //       success: search.success,
-//     //       count: search.count,
-//     //       results: search.results?.map(r => ({
-//     //         id: r.documentId,
-//     //         title: r.title,
-//     //         score: r.score,
-//     //         contentLength: r.content?.length
-//     //       }))
-//     //     });
-
-//     //     const count = search.success ? search.count : 0;
-//     //     const top = (search.results || []).slice(0, 3)
-//     //       .map((r: any, i: number) => {
-//     //         const title = r.title || 'Memory';
-//     //         const score = typeof r.score === 'number' ? ` (relevance: ${(r.score * 100).toFixed(0)}%)` : '';
-//     //         const content = r.content ? `\n  ${r.content.substring(0, 200)}${r.content.length > 200 ? '...' : ''}` : '';
-//     //         return `- ${title}${score}${content}`;
-//     //       })
-//     //       .join('\n\n');
-//     //     const prefix = anyTextSent ? '\n\n' : '';
-//     //     const fallbackText = count > 0
-//     //       ? `${prefix}I found ${count} relevant memory${count === 1 ? '' : 'ies'} in your knowledge base:\n\n${top}\n\nWould you like me to search for more details on any of these?`
-//     //       : `${prefix}I couldn't find relevant memories for that yet. You can tell me something to remember, for example:\n- "Remember that I like playing chess and video games"\n- "I enjoy outdoor activities like hiking and cycling"`;
-//     //     res.write(fallbackText);
-//     //   } catch (e) {
-//     //     // As a last resort, send a generic response
-//     //     res.write('I checked your memories but could not generate a response.');
-//     //   }
-//     // }
-
-//     res.end();
-//   } catch (error) {
-//     console.error('Chat error:', error);
-
-//     // Check if headers have already been sent (streaming started)
-//     if (res.headersSent) {
-//       // If streaming has started, just end the response
-//       console.error('Error occurred after streaming started - ending response');
-//       if (!res.writableEnded) {
-//         res.end();
-//       }
-//       return;
-//     }
-
-//     // Otherwise, send proper error response
-//     if (error instanceof z.ZodError) {
-//       return res.status(400).json({
-//         error: 'Invalid request format',
-//         details: error.errors
-//       });
-//     }
-
-//     res.status(500).json({
-//       error: 'Internal server error',
-//       message: error instanceof Error ? error.message : 'Unknown error'
-//     });
-//   }
-// }
-
 export async function chatRequest(req: Request, res: Response) {
   try {
-    // console.log("REQ BODY:", req.body);
+    console.log("Chat request Triggered \n\nREQ BODY:", req.body);
     // console.log("REQ HEADERS:", req.headers);
 
     const { messages, metadata } = chatRequestSchema.parse(req.body);
     const { projectId } = metadata;
-
+    const userId = req.user.id;
+    console.log(metadata)
     // Verify the project/space exists
     const space = await prisma.space.findUnique({
       where: { id: projectId },
@@ -336,6 +103,110 @@ export async function chatRequest(req: Request, res: Response) {
           return await memoryService.fetchMemory(memoryId, projectId);
         },
       }),
+
+      get_calendar_events: tool({
+        name: 'getCalendarEvents',
+        description: "Get a list of Google Calendar events for a specific date range.",
+        inputSchema: z.object({
+          minTime: z.string().describe("The start date/time (ISO 8601 or YYYY-MM-DD)."),
+          maxTime: z.string().describe("The end date/time (ISO 8601 or YYYY-MM-DD)."),
+        }),
+        execute: async (args) => {
+          return await getCalendarEvents(args, userId);
+        },
+      }),
+
+      set_calendar_event: tool({
+        name: 'setCalendarEvent',
+        description: "Set a calendar event. All times must include a timezone.",
+        inputSchema: z.object({
+          summary: z.string().describe("The title or summary of the event."),
+          start: z.object({
+            dateTime: z.string().describe("ISO 8601 format, e.g., '2025-11-20T09:00:00-07:00'"),
+            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'")
+          }),
+          end: z.object({
+            dateTime: z.string().describe("ISO 8601 format"),
+            timeZone: z.string().describe("The timezone")
+          }),
+          location: z.string().optional().describe("Location of the event"),
+          description: z.string().optional().describe("Detailed description"),
+          attendees: z.array(z.string().email()).optional().describe("List of attendee emails"),
+          recurrence: z.array(z.string()).optional().describe("Recurrence rules like RRULE"),
+        }),
+        execute: async (args) => {
+          return await setCalendarEvent(args, userId);
+        },
+      }),
+
+      // --- ✅ Tasks Tools ---
+      set_calendar_task: tool({
+        name: 'setCalendarTask',
+        description: "Creates a new task in Google Tasks.",
+        inputSchema: z.object({
+          title: z.string().describe("The main title of the task."),
+          description: z.string().optional().describe("Additional notes."),
+          dueDate: z.string().optional().describe("ISO 8601 format (e.g., '2025-11-20T09:00:00Z')."),
+          category: z.string().optional().describe("The task list name (e.g., 'Work', 'My Tasks')."),
+          isCompleted: z.boolean().optional().describe("Set to true if task is already done."),
+        }),
+        execute: async (args) => {
+          return await setCalendarTask(args, userId);
+        },
+      }),
+
+      list_calendar_tasks: tool({
+        name: 'listCalendarTasks',
+        description: "List and filter tasks from Google Tasks.",
+        inputSchema: z.object({
+          category: z.string().optional().describe("The specific task list to view (e.g., 'Work')."),
+          groupBy: z.enum(['category', 'status', 'none']).optional().describe("How to organize results."),
+          showCompleted: z.boolean().optional().default(true),
+          dueMin: z.string().optional().describe("Filter tasks due AFTER this date."),
+          dueMax: z.string().optional().describe("Filter tasks due BEFORE this date."),
+        }),
+        execute: async (args) => {
+          return await listCalendarTasks(args, userId);
+        },
+      }),
+
+      // --- 📧 Email Tools ---
+      get_emails: tool({
+        name: 'getEmails',
+        description: "List emails with metadata (Subject, Sender, Date). Optimized for lists.",
+        inputSchema: z.object({
+          filter: z.string().optional().describe("Specific Gmail search query like 'from:boss@gmail.com'."),
+          category: z.enum(["INBOX", "SENT", "DRAFT", "STARRED", "ARCHIVED", "SPAM", "ALL"]).optional().describe("Folder to search in."),
+          limit: z.number().optional().describe("Max number of emails to return."),
+        }),
+        execute: async (args) => {
+          return await getEmails(args, userId);
+        },
+      }),
+
+      get_email_details: tool({
+        name: 'getEmailDetails',
+        description: "Get the full body content of a specific email using its ID.",
+        inputSchema: z.object({
+          messageId: z.string().describe("The unique ID of the email to fetch."),
+        }),
+        execute: async (args) => {
+          return await getEmailDetails(args, userId);
+        },
+      }),
+
+      send_email: tool({
+        name: 'sendEmail',
+        description: "Send a new email to a recipient.",
+        inputSchema: z.object({
+          to: z.string().email().describe("Recipient's email address."),
+          subject: z.string().describe("Email subject line."),
+          body: z.string().describe("Content of the email (HTML or Text)."),
+        }),
+        execute: async (args) => {
+          return await sendEmail(args, userId);
+        },
+      }),
     };
 
     // Set headers for streaming response
@@ -370,22 +241,33 @@ export async function chatRequest(req: Request, res: Response) {
         model: google('gemini-2.5-pro'),
         messages: conversationMessages,
         tools: tools,
-        system: `You are a helpful assistant with access to the user's personal memories.
+        system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
 
-        [Current Date & Time]: ${now}
+[Current Date & Time]: ${new Date().toISOString()}
+[userId]: ${userId}
 
-        When answering questions:
+**CORE RESPONSIBILITIES:**
 
-        For general knowledge questions, use your own knowledge directly
-        Use search/add memory tools when the question relates to the user's personal information, preferences, or past experiences
-        Always provide a helpful response even if no relevant memories are found
+1. **Personal Memories:** Use 'search_memories' / 'add_memory' when the question relates to the user's preferences, past choices, or specific stored facts.
+2. **Google Workspace:** Use the provided tools to manage the user's Calendar, Tasks, and Emails.
 
-        [IMPORTANT] How to use 'search_memories' tool results:
-        1. After you get a JSON object from the 'search_memories' tool (e.g., { memories: [...] }), you MUST synthesize that information into a natural, conversational answer.
-        2. Do NOT just list the memories or output the raw JSON.
-        3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "your favorite sport is football.").
-        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that."
-        `,
+**TOOL USAGE GUIDELINES:**
+
+* **Calendar & Tasks:**
+    * When creating events or tasks, infer the current year/date from [Current Date & Time] if not specified.
+    * If a user asks to "List my tasks", check if they specified a category (e.g., "Work"). If not, check all lists or ask for clarification if needed.
+* **Email:**
+    * When fetching emails, use the \`limit\` parameter to keep responses concise unless the user asks for many.
+    * **Privacy:** Do not read out full email bodies unless explicitly asked. Summarize the 'snippet' or 'subject' first.
+
+**RESPONSE FORMATTING (CRITICAL):**
+
+* **Synthesize, Don't Dump:** Never output raw JSON or tool return values directly.
+    * *Bad:* "Function returned { status: 'success', title: 'Meeting' }"
+    * *Good:* "I've successfully scheduled the 'Meeting' for you."
+* **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
+* **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
+`,
       });
 
       // let assistantText = "";
@@ -482,6 +364,12 @@ export async function chatRequestWithID(req: Request, res: Response) {
   try {
     // const { id } = req.params;
     const { messages, metadata } = req.body;
+    // console.log("chat Req qith id triggered!!\n");
+    // console.log(metadata);
+    // console.log(req.user)
+    const userId=req.user.id;
+    // console.log(userId);
+
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
@@ -617,6 +505,109 @@ export async function chatRequestWithID(req: Request, res: Response) {
           return await memoryService.fetchMemory(memoryId, projectId);
         },
       }),
+      get_calendar_events: tool({
+        name: 'getCalendarEvents',
+        description: "Get a list of Google Calendar events for a specific date range.",
+        inputSchema: z.object({
+          minTime: z.string().describe("The start date/time (ISO 8601 or YYYY-MM-DD)."),
+          maxTime: z.string().describe("The end date/time (ISO 8601 or YYYY-MM-DD)."),
+        }),
+        execute: async (args) => {
+          return await getCalendarEvents(args, userId);
+        },
+      }),
+
+      set_calendar_event: tool({
+        name: 'setCalendarEvent',
+        description: "Set a calendar event. All times must include a timezone.",
+        inputSchema: z.object({
+          summary: z.string().describe("The title or summary of the event."),
+          start: z.object({
+            dateTime: z.string().describe("ISO 8601 format, e.g., '2025-11-20T09:00:00-07:00'"),
+            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'")
+          }),
+          end: z.object({
+            dateTime: z.string().describe("ISO 8601 format"),
+            timeZone: z.string().describe("The timezone")
+          }),
+          location: z.string().optional().describe("Location of the event"),
+          description: z.string().optional().describe("Detailed description"),
+          attendees: z.array(z.string().email()).optional().describe("List of attendee emails"),
+          recurrence: z.array(z.string()).optional().describe("Recurrence rules like RRULE"),
+        }),
+        execute: async (args) => {
+          return await setCalendarEvent(args, userId);
+        },
+      }),
+
+      // --- ✅ Tasks Tools ---
+      set_calendar_task: tool({
+        name: 'setCalendarTask',
+        description: "Creates a new task in Google Tasks.",
+        inputSchema: z.object({
+          title: z.string().describe("The main title of the task."),
+          description: z.string().optional().describe("Additional notes."),
+          dueDate: z.string().optional().describe("ISO 8601 format (e.g., '2025-11-20T09:00:00Z')."),
+          category: z.string().optional().describe("The task list name (e.g., 'Work', 'My Tasks')."),
+          isCompleted: z.boolean().optional().describe("Set to true if task is already done."),
+        }),
+        execute: async (args) => {
+          return await setCalendarTask(args, userId);
+        },
+      }),
+
+      list_calendar_tasks: tool({
+        name: 'listCalendarTasks',
+        description: "List and filter tasks from Google Tasks.",
+        inputSchema: z.object({
+          category: z.string().optional().describe("The specific task list to view (e.g., 'Work')."),
+          groupBy: z.enum(['category', 'status', 'none']).optional().describe("How to organize results."),
+          showCompleted: z.boolean().optional().default(true),
+          dueMin: z.string().optional().describe("Filter tasks due AFTER this date."),
+          dueMax: z.string().optional().describe("Filter tasks due BEFORE this date."),
+        }),
+        execute: async (args) => {
+          return await listCalendarTasks(args, userId);
+        },
+      }),
+
+      // --- 📧 Email Tools ---
+      get_emails: tool({
+        name: 'getEmails',
+        description: "List emails with metadata (Subject, Sender, Date). Optimized for lists.",
+        inputSchema: z.object({
+          filter: z.string().optional().describe("Specific Gmail search query like 'from:boss@gmail.com'."),
+          category: z.enum(["INBOX", "SENT", "DRAFT", "STARRED", "ARCHIVED", "SPAM", "ALL"]).optional().describe("Folder to search in."),
+          limit: z.number().optional().describe("Max number of emails to return."),
+        }),
+        execute: async (args) => {
+          return await getEmails(args, userId);
+        },
+      }),
+
+      get_email_details: tool({
+        name: 'getEmailDetails',
+        description: "Get the full body content of a specific email using its ID.",
+        inputSchema: z.object({
+          messageId: z.string().describe("The unique ID of the email to fetch."),
+        }),
+        execute: async (args) => {
+          return await getEmailDetails(args, userId);
+        },
+      }),
+
+      send_email: tool({
+        name: 'sendEmail',
+        description: "Send a new email to a recipient.",
+        inputSchema: z.object({
+          to: z.string().email().describe("Recipient's email address."),
+          subject: z.string().describe("Email subject line."),
+          body: z.string().describe("Content of the email (HTML or Text)."),
+        }),
+        execute: async (args) => {
+          return await sendEmail(args, userId);
+        },
+      }),
     };
 
     const now = new Date().toLocaleString('en-IN', {
@@ -629,28 +620,38 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
     const convertToModel = convertToModelMessages(messages);
     // console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
-
     const result = await streamText({
       model: google('gemini-2.5-flash'),
       messages: convertToModel,
       tools: tools,
       maxSteps: 5,
-      system: `You are a helpful assistant with access to the user's personal memories.
+      system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
 
-        [Current Date & Time]: ${now}
+[Current Date & Time]: ${new Date().toISOString()}
+[userId]: ${userId}
 
-        When answering questions:
+**CORE RESPONSIBILITIES:**
 
-        For general knowledge questions, use your own knowledge directly
-        Use search/add memory tools when the question relates to the user's personal information, preferences, or past experiences
-        Always provide a helpful response even if no relevant memories are found
+1. **Personal Memories:** Use 'search_memories' / 'add_memory' when the question relates to the user's preferences, past choices, or specific stored facts.
+2. **Google Workspace:** Use the provided tools to manage the user's Calendar, Tasks, and Emails.
 
-        [IMPORTANT] How to use 'search_memories' tool results:
-        1. After you get a JSON object from the 'search_memories' tool (e.g., { memories: [...] }), you MUST synthesize that information into a natural, conversational answer.
-        2. Do NOT just list the memories or output the raw JSON.
-        3. If the memories provide a clear answer (e.g., "I like to play football"), state it directly (e.g., "your favorite sport is football.").
-        4. If no memories are found (e.g., { memories: [], note: '...' }), just say "I couldn't find any memories about that. If you'd want me to remember something about this, please tell me."
-        `,
+**TOOL USAGE GUIDELINES:**
+
+* **Calendar & Tasks:**
+    * When creating events or tasks, infer the current year/date from [Current Date & Time] if not specified.
+    * If a user asks to "List my tasks", check if they specified a category (e.g., "Work"). If not, check all lists or ask for clarification if needed.
+* **Email:**
+    * When fetching emails, use the \`limit\` parameter to keep responses concise unless the user asks for many.
+    * **Privacy:** Do not read out full email bodies unless explicitly asked. Summarize the 'snippet' or 'subject' first.
+
+**RESPONSE FORMATTING (CRITICAL):**
+
+* **Synthesize, Don't Dump:** Never output raw JSON or tool return values directly.
+    * *Bad:* "Function returned { status: 'success', title: 'Meeting' }"
+    * *Good:* "I've successfully scheduled the 'Meeting' for you."
+* **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
+* **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
+`,
     });
 
     result.pipeUIMessageStreamToResponse(res);
@@ -719,92 +720,3 @@ export async function chatTitleRequest(req: Request, res: Response) {
     });
   }
 }
-
-/* Helper functions */
-
-// function convertMessages(frontendMessages: any[]) {
-//   return frontendMessages
-//     .map((message) => {
-//       const baseMessage = {
-//         role: message.role,
-//         content: "",
-//       };
-
-//       // Handle different message types
-//       switch (message.role) {
-//         case "user":
-//           if (message.parts && Array.isArray(message.parts)) {
-//             const textContent = message.parts
-//               .filter((part: any) => part.type === "text")
-//               .map((part: any) => part.text)
-//               .join("\n");
-//             return { ...baseMessage, content: textContent };
-//           }
-//           return baseMessage;
-
-//         case "assistant":
-//           if (message.parts && Array.isArray(message.parts)) {
-//             const textContent = message.parts
-//               .filter((part: any) => part.type === "text")
-//               .map((part: any) => part.text)
-//               .join("\n");
-
-//             const toolCalls = message.parts
-//               .filter((part: any) => part.type === "tool-call")
-//               .map((part: any) => ({
-//                 toolCallId: part.toolCallId,
-//                 toolName: part.toolName,
-//                 args: part.args,
-//               }));
-
-//             if (toolCalls.length > 0) {
-//               return {
-//                 ...baseMessage,
-//                 content: textContent,
-//                 toolCalls,
-//               };
-//             }
-//             return { ...baseMessage, content: textContent };
-//           }
-//           return baseMessage;
-
-//         case "tool":
-//           if (message.parts && Array.isArray(message.parts)) {
-//             const textContent = message.parts
-//               .filter((part: any) => part.type === "text")
-//               .map((part: any) => part.text)
-//               .join("\n");
-
-//             return {
-//               ...baseMessage,
-//               content: textContent,
-//               toolCallId: message.toolCallId,
-//             };
-//           }
-//           return baseMessage;
-
-//         default:
-//           return baseMessage;
-//       }
-//     })
-//     .filter(
-//       (msg) => msg.content !== "" || (msg.toolCalls && msg.toolCalls.length > 0)
-//     );
-// }
-
-// function convertUIToModelMessages(
-//   uiMessages: any[]
-// ): { role: string; content: string }[] {
-//   return uiMessages.map((msg) => {
-//     // Join all text parts into a single content string (ignore non-text parts if any)
-//     const content = msg?.parts
-//       ?.filter((part: any) => part.type === "text")
-//       .map((part: any) => part.text)
-//       .join(" ");
-
-//     return {
-//       role: msg.role,
-//       content,
-//     };
-//   });
-// }

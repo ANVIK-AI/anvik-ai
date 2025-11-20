@@ -4,12 +4,12 @@ import prisma from "../db/prismaClient";
 import { isAuthenticated } from "../middleware/auth.middleware";
 const router = Router();
 
-router.post("/chat", chatRequest);
+router.post("/chat" ,isAuthenticated,chatRequest);
 
-router.post("/chat/:id", chatRequestWithID);
+router.post("/chat/:id",isAuthenticated, chatRequestWithID);
 
 
-router.post("/chat/title", chatTitleRequest); 
+router.post("/chat/title", isAuthenticated,chatTitleRequest); 
 
 router.get('/chat/health', async (req, res) => {
     try {

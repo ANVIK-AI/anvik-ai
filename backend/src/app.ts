@@ -142,12 +142,12 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Debug middleware for sessions
-app.use((req, res, next) => {
-  console.log('Session:', req.session);
-  console.log('User:', req.user);
-  console.log('Cookies:', req.cookies);
-  next();
-});
+// app.use((req, res, next) => {
+//   console.log('Session:', req.session);
+//   console.log('User:', req.user);
+//   console.log('Cookies:', req.cookies);
+//   next();
+// });
 
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID as string,

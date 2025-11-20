@@ -16,6 +16,7 @@ export async function getDocumentsWithMemories(req: Request, res: Response) {
   // console.log("Request body:", req.body);
 
   // 1. Validate the request body against the Zod schema
+  const id=req.user.id;
   const validationResult = DocumentsWithMemoriesQuerySchema.safeParse(req.body);
 
   if (!validationResult.success) {
@@ -47,7 +48,7 @@ export async function getDocumentsWithMemories(req: Request, res: Response) {
 function getAuth(req: Request) {
   // You likely have a session cookie. For now, just use demo IDs.
   const orgId = (req as any).orgId || 'demo_org';
-  const userId = (req as any).userId || 'demo_user';
+  const userId = (req as any).id || 'demo_user';
   return { orgId, userId };
 }
 

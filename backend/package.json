@@ -39,6 +39,7 @@
     "express-rate-limit": "^8.1.0",
     "express-session": "^1.18.2",
     "express-sessions": "^1.0.1",
+    "googleapis": "^166.0.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.11.0",
