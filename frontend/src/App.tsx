@@ -65,7 +65,7 @@ function App() {
 
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<PortfolioHome />} />
+          <Route path="/profile" element={<PortfolioHome />} />
           <Route
             path="/login"
             element={

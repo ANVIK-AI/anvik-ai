@@ -23,6 +23,7 @@ class AuthService {
           orgId: "default-org-id",  // You'll need to get this from the user's context
           ownerId: profile.id,  // Assuming profile contains the user's ID
           visibility: "private",  // Using the default value
+          containerTag: "test_project",
           contentTextIndex: {},   // Default empty JSON
         },
       });

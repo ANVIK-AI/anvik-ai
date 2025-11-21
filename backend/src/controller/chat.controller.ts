@@ -237,11 +237,13 @@ export async function chatRequest(req: Request, res: Response) {
         timeStyle: 'medium',
       });
 
-      const result = await streamText({
-        model: google('gemini-2.5-pro'),
-        messages: conversationMessages,
-        tools: tools,
-        system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
+      let result;
+      try {
+        result = await streamText({
+          model: google('gemini-2.5-pro'),
+          messages: conversationMessages,
+          tools: tools,
+          system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
 
 [Current Date & Time]: ${new Date().toISOString()}
 [userId]: ${userId}
@@ -268,27 +270,63 @@ export async function chatRequest(req: Request, res: Response) {
 * **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
 * **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
 `,
-      });
+        });
+      } catch (streamError) {
+        console.error(`[Iteration ${iterationCount}] Error calling streamText:`, streamError);
+        const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown error';
+        const isNetworkError = errorMessage.includes('ENOTFOUND') || 
+                               errorMessage.includes('ECONNREFUSED') || 
+                               errorMessage.includes('timeout') ||
+                               errorMessage.includes('Cannot connect to API');
+        
+        // Write error message to stream if headers are sent
+        if (res.headersSent) {
+          res.write(`\n\n[Error] Unable to connect to AI service. Please check your internet connection and try again.`);
+          res.end();
+          return;
+        } else {
+          return res.status(500).json({
+            error: 'AI service error',
+            message: isNetworkError 
+              ? 'Unable to connect to AI service. Please check your internet connection and try again.'
+              : errorMessage,
+          });
+        }
+      }
 
       // let assistantText = "";
       let hasToolCalls = false;
 
       // Stream the text and collect tool calls
-      for await (const part of result.fullStream) {
-        if (part.type === 'text-delta') {
-          const chunk = part.text;
-          if (chunk && chunk.length > 0) {
-            // assistantText += chunk;
-            res.write(chunk);
+      try {
+        for await (const part of result.fullStream) {
+          if (part.type === 'text-delta') {
+            const chunk = part.text;
+            if (chunk && chunk.length > 0) {
+              // assistantText += chunk;
+              res.write(chunk);
+            }
+          } else if (part.type === 'tool-call') {
+            hasToolCalls = true;
+            console.log(`[Tool Call] ${part.toolName}`);
+          } else if (part.type === 'tool-result') {
+            console.log(`[Tool Result] ${part.toolName}`);
+          } else if (part.type === 'finish') {
+            console.log(`[Finish] Reason: ${part.finishReason}`);
           }
-        } else if (part.type === 'tool-call') {
-          hasToolCalls = true;
-          console.log(`[Tool Call] ${part.toolName}`);
-        } else if (part.type === 'tool-result') {
-          console.log(`[Tool Result] ${part.toolName}`);
-        } else if (part.type === 'finish') {
-          console.log(`[Finish] Reason: ${part.finishReason}`);
         }
+      } catch (streamLoopError) {
+        console.error(`[Iteration ${iterationCount}] Error during streaming loop:`, streamLoopError);
+        const errorMessage = streamLoopError instanceof Error ? streamLoopError.message : 'Unknown error';
+        const isNetworkError = errorMessage.includes('ENOTFOUND') || 
+                               errorMessage.includes('ECONNREFUSED') || 
+                               errorMessage.includes('timeout') ||
+                               errorMessage.includes('Cannot connect to API');
+        if (!res.writableEnded) {
+          res.write(`\n\n[Error] ${isNetworkError ? 'Unable to connect to AI service. Please check your internet connection and try again.' : errorMessage}`);
+          res.end();
+        }
+        continueLoop = false;
       }
 
       // After streaming completes, check if we need to continue
@@ -620,12 +658,15 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
     const convertToModel = convertToModelMessages(messages);
     // console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
-    const result = await streamText({
-      model: google('gemini-2.5-flash'),
-      messages: convertToModel,
-      tools: tools,
-      maxSteps: 5,
-      system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
+    
+    let result;
+    try {
+      result = await streamText({
+        model: google('gemini-2.5-flash'),
+        messages: convertToModel,
+        tools: tools,
+        maxSteps: 5,
+        system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
 
 [Current Date & Time]: ${new Date().toISOString()}
 [userId]: ${userId}
@@ -652,24 +693,78 @@ export async function chatRequestWithID(req: Request, res: Response) {
 * **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
 * **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
 `,
-    });
+      });
+    } catch (streamError) {
+      console.error('Error calling streamText:', streamError);
+      const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown error';
+      const isNetworkError = errorMessage.includes('ENOTFOUND') || 
+                             errorMessage.includes('ECONNREFUSED') || 
+                             errorMessage.includes('timeout') ||
+                             errorMessage.includes('Cannot connect to API');
+      
+      if (!res.headersSent) {
+        return res.status(500).json({
+          error: 'AI service error',
+          message: isNetworkError 
+            ? 'Unable to connect to AI service. Please check your internet connection and try again.'
+            : errorMessage,
+        });
+      } else {
+        // Headers already sent, try to send error in stream format
+        res.write(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`);
+        res.end();
+        return;
+      }
+    }
 
-    result.pipeUIMessageStreamToResponse(res);
+    try {
+      result.pipeUIMessageStreamToResponse(res);
+    } catch (pipeError) {
+      console.error('Error during streaming:', pipeError);
+      if (!res.writableEnded) {
+        if (!res.headersSent) {
+          const errorMessage = pipeError instanceof Error ? pipeError.message : 'Unknown error';
+          return res.status(500).json({
+            error: 'Streaming error',
+            message: errorMessage,
+          });
+        } else {
+          // Headers sent, end the response
+          res.end();
+        }
+      }
+    }
   } catch (error) {
-    console.log('Chat request error:', error);
+    console.error('Chat request error:', error);
 
     if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        error: 'Invalid request format',
-        details: error.errors,
-      });
+      if (!res.headersSent) {
+        return res.status(400).json({
+          error: 'Invalid request format',
+          details: error.errors,
+        });
+      }
+      return;
     }
 
     if (!res.headersSent) {
-      res.status(500).json({
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isNetworkError = errorMessage.includes('ENOTFOUND') || 
+                             errorMessage.includes('ECONNREFUSED') || 
+                             errorMessage.includes('timeout') ||
+                             errorMessage.includes('Cannot connect to API');
+      
+      return res.status(500).json({
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: isNetworkError 
+          ? 'Unable to connect to AI service. Please check your internet connection and try again.'
+          : errorMessage,
       });
+    } else {
+      // Headers already sent, try to end gracefully
+      if (!res.writableEnded) {
+        res.end();
+      }
     }
   }
 }

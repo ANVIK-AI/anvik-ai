@@ -466,14 +466,22 @@ export function ChatMessages() {
           },
         });
 
+        // Add timeout to prevent hanging (5 minutes for streaming responses)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 5 * 60 * 1000); // 5 minutes
+
         return fetch(url, {
           ...options,
           body: requestBody,
           credentials: 'include',
-          
+          signal: controller.signal,
           headers,
           // include cookies if backend uses them; harmless otherwise
           // credentials: (options as any)?.credentials ?? "include",
+        }).finally(() => {
+          clearTimeout(timeoutId);
         });
       },
     }),
@@ -494,6 +502,16 @@ export function ChatMessages() {
     },
     onError: (error) => {
       console.error('❌ Chat error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while chatting';
+      
+      // Show user-friendly error message
+      if (errorMessage.includes('connect') || errorMessage.includes('network') || errorMessage.includes('fetch')) {
+        toast.error('Unable to connect to the chat service. Please check your internet connection and try again.');
+      } else if (errorMessage.includes('AI service') || errorMessage.includes('ENOTFOUND')) {
+        toast.error('Unable to reach the AI service. Please check your internet connection and try again.');
+      } else {
+        toast.error(`Chat error: ${errorMessage}`);
+      }
     },
   });
 
@@ -1421,15 +1439,31 @@ export function ChatMessages() {
                             );
                           case 'output-available': {
                             const output = part.output;
-                            const tasks =
+                            const totalCount =
                               typeof output === 'object' &&
                               output !== null &&
-                              'tasks' in output &&
-                              Array.isArray((output as { tasks: any[] }).tasks)
-                                ? (output as { tasks: any[] }).tasks
-                                : [];
+                              'totalCount' in output
+                                ? Number((output as { totalCount: number }).totalCount) || 0
+                                : 0;
+                            const tasksData =
+                              typeof output === 'object' &&
+                              output !== null &&
+                              'data' in output &&
+                              typeof (output as { data: any }).data === 'object'
+                                ? (output as { data: Record<string, any[]> }).data
+                                : {};
 
-                            if (tasks.length === 0) {
+                            // Flatten tasks from all categories
+                            const allTasks: Array<{ category: string; task: any }> = [];
+                            Object.entries(tasksData).forEach(([category, tasks]) => {
+                              if (Array.isArray(tasks)) {
+                                tasks.forEach((task) => {
+                                  allTasks.push({ category, task });
+                                });
+                              }
+                            });
+
+                            if (totalCount === 0 || allTasks.length === 0) {
                               return (
                                 <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
                                   <Check className="size-4" /> No tasks found
@@ -1441,28 +1475,64 @@ export function ChatMessages() {
                               <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
                                 <div className="flex items-center gap-2 text-gray-900 mb-2">
                                   <Check className="size-4 text-blue-600" />
-                                  <span className="font-medium">{tasks.length} task{tasks.length !== 1 ? 's' : ''} found</span>
+                                  <span className="font-medium">
+                                    {totalCount} task{totalCount !== 1 ? 's' : ''} found
+                                  </span>
                                 </div>
-                                <div className="ml-6 space-y-2 max-h-64 overflow-y-auto">
-                                  {tasks.map((task: any, idx: number) => (
-                                    <div key={idx} className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0">
-                                      <div className="flex items-center gap-2">
-                                        {task.status === 'completed' ? (
-                                          <Check className="size-3 text-green-600" />
-                                        ) : (
-                                          <div className="size-3 border border-gray-400 rounded" />
-                                        )}
-                                        <span className={task.status === 'completed' ? 'line-through text-muted-foreground' : 'font-medium'}>
-                                          {task.title}
-                                        </span>
-                                      </div>
-                                      {task.due && (
-                                        <div className="ml-5 text-muted-foreground">
-                                          Due: {new Date(task.due).toLocaleDateString()}
+                                <div className="ml-6 space-y-3 max-h-64 overflow-y-auto">
+                                  {Object.entries(tasksData).map(([category, tasks]) => {
+                                    if (!Array.isArray(tasks) || tasks.length === 0) return null;
+                                    return (
+                                      <div key={category} className="space-y-2">
+                                        <div className="font-medium text-xs text-gray-700 uppercase tracking-wide">
+                                          {category}
                                         </div>
-                                      )}
-                                    </div>
-                                  ))}
+                                        {tasks.map((task: any) => (
+                                          <div
+                                            key={task.id || task.title}
+                                            className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              {task.status === 'completed' ? (
+                                                <Check className="size-3 text-green-600" />
+                                              ) : (
+                                                <div className="size-3 border border-gray-400 rounded" />
+                                              )}
+                                              <span
+                                                className={
+                                                  task.status === 'completed'
+                                                    ? 'line-through text-muted-foreground'
+                                                    : 'font-medium'
+                                                }
+                                              >
+                                                {task.title}
+                                              </span>
+                                            </div>
+                                            {task.due && (
+                                              <div className="ml-5 text-muted-foreground">
+                                                Due: {new Date(task.due).toLocaleDateString()}
+                                              </div>
+                                            )}
+                                            {task.notes && (
+                                              <div className="ml-5 text-muted-foreground line-clamp-2">
+                                                {task.notes}
+                                              </div>
+                                            )}
+                                            {task.link && (
+                                              <a
+                                                className="ml-5 text-blue-600 hover:underline text-xs"
+                                                href={task.link}
+                                                rel="noopener noreferrer"
+                                                target="_blank"
+                                              >
+                                                View in Google Tasks
+                                              </a>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
