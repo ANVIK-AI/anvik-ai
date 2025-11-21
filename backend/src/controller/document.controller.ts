@@ -119,6 +119,10 @@ export async function uploadDocumentFile(req: Request, res: Response) {
 
     logger.info('calling service file upload');
     console.log('calling service file upload');
+    console.log('req: ', req);
+    console.log('orgId: ', orgId);
+    console.log('userId: ', userId);
+    console.log('containerTags: ', containerTags);
     // Call the service to handle the upload
     const result = await uploadDocumentService({
       file,

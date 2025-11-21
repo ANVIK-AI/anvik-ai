@@ -2,7 +2,7 @@ import { useChat, useCompletion } from '@ai-sdk/react';
 import { cn } from '@lib/utils';
 import { Button } from '@ui/components/button';
 import { DefaultChatTransport } from 'ai';
-import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, RotateCcw, X } from 'lucide-react';
+import { ArrowUp, Calendar, Check, ChevronDown, ChevronRight, Clock, Copy, Mail, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -104,6 +104,232 @@ function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
   );
 }
 
+interface EmailResult {
+  id?: string;
+  threadId?: string;
+  subject?: string;
+  from?: string;
+  date?: string;
+  snippet?: string;
+}
+
+interface ExpandableEmailsProps {
+  foundCount: number;
+  results: EmailResult[];
+  category?: string;
+}
+
+function ExpandableEmails({ foundCount, results, category }: ExpandableEmailsProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Helper function to decode HTML entities in snippet
+  const decodeHtml = (html: string) => {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = html;
+    return txt.value;
+  };
+
+  // Helper function to format date
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Helper function to extract email address from "Name <email@domain.com>" format
+  const extractEmailAddress = (fromStr?: string) => {
+    if (!fromStr) return '';
+    const match = fromStr.match(/<([^>]+)>/);
+    return match ? match[1] : fromStr;
+  };
+
+  if (foundCount === 0) {
+    return (
+      <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
+        <Check className="size-4" /> No emails found{category ? ` in ${category}` : ''}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-sm">
+      <button
+        className="flex items-center gap-2 text-muted-foreground transition-colors text-gray-900"
+        onClick={() => setIsExpanded(!isExpanded)}
+        type="button"
+      >
+        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        {foundCount} email{foundCount !== 1 ? 's' : ''} found{category ? ` in ${category}` : ''}
+      </button>
+
+      {isExpanded && results.length > 0 && (
+        <div className="mt-2 ml-6 space-y-2 max-h-96 overflow-y-auto">
+          {results.map((email, index) => (
+            <div
+              className="p-3 bg-accent/50 rounded-md border border-border bg-white hover:bg-accent transition-colors"
+              key={email.id || email.threadId || index}
+            >
+              <div className="text-gray-900">
+                {email.subject && (
+                  <div className="font-medium text-sm mb-1.5 flex items-start gap-2">
+                    <Mail className="size-4 mt-0.5 flex-shrink-0 text-blue-600" />
+                    <span className="flex-1">{email.subject}</span>
+                  </div>
+                )}
+                {email.from && (
+                  <div className="text-xs text-muted-foreground mb-1">
+                    From: <span className="font-medium">{extractEmailAddress(email.from)}</span>
+                  </div>
+                )}
+                {email.date && (
+                  <div className="text-xs text-muted-foreground mb-2">
+                    {formatDate(email.date)}
+                  </div>
+                )}
+                {email.snippet && (
+                  <div className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
+                    {decodeHtml(email.snippet)}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface EmailDetailsData {
+  id?: string;
+  threadId?: string;
+  subject?: string;
+  from?: string;
+  to?: string;
+  date?: string;
+  snippet?: string;
+  body?: string; // HTML content
+}
+
+interface EmailDetailsProps {
+  email: EmailDetailsData;
+}
+
+function EmailDetails({ email }: EmailDetailsProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Helper function to format date
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Helper function to extract email address from "Name <email@domain.com>" format
+  const extractEmailAddress = (emailStr?: string) => {
+    if (!emailStr) return '';
+    const match = emailStr.match(/<([^>]+)>/);
+    return match ? match[1] : emailStr;
+  };
+
+  // Helper function to extract name from "Name <email@domain.com>" format
+  const extractName = (emailStr?: string) => {
+    if (!emailStr) return '';
+    const match = emailStr.match(/^(.+?)\s*<(.+)>$/);
+    return match ? match[1].trim().replace(/['"]/g, '') : '';
+  };
+
+  return (
+    <div className="text-sm">
+      <button
+        className="flex items-center gap-2 text-muted-foreground transition-colors text-gray-900"
+        onClick={() => setIsExpanded(!isExpanded)}
+        type="button"
+      >
+        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        Email details
+      </button>
+
+      {isExpanded && (
+        <div className="mt-2 ml-6 bg-accent/50 rounded-md border border-border bg-white p-4">
+          <div className="text-gray-900 space-y-3">
+            {email.subject && (
+              <div className="font-medium text-base mb-2 flex items-start gap-2">
+                <Mail className="size-5 mt-0.5 flex-shrink-0 text-blue-600" />
+                <span className="flex-1">{email.subject}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5 text-xs border-b border-border pb-3">
+              {email.from && (
+                <div className="flex gap-2">
+                  <span className="text-muted-foreground min-w-[3rem]">From:</span>
+                  <span className="text-gray-900">
+                    {extractName(email.from) && (
+                      <span className="font-medium">{extractName(email.from)} </span>
+                    )}
+                    <span className="text-blue-600">{extractEmailAddress(email.from)}</span>
+                  </span>
+                </div>
+              )}
+              {email.to && (
+                <div className="flex gap-2">
+                  <span className="text-muted-foreground min-w-[3rem]">To:</span>
+                  <span className="text-gray-900">{extractEmailAddress(email.to)}</span>
+                </div>
+              )}
+              {email.date && (
+                <div className="flex gap-2">
+                  <span className="text-muted-foreground min-w-[3rem]">Date:</span>
+                  <span className="text-gray-900">{formatDate(email.date)}</span>
+                </div>
+              )}
+            </div>
+
+            {email.body && (
+              <div className="mt-3">
+                <div
+                  className="email-body prose prose-sm max-w-none text-gray-900"
+                  dangerouslySetInnerHTML={{ __html: email.body }}
+                  style={{
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                  }}
+                />
+              </div>
+            )}
+            {email.snippet && !email.body && (
+              <div className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                {email.snippet}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -188,11 +414,7 @@ function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
 
 export function ChatMessages() {
   const {user}=useAuth();
-  //TODO:use this method to set the project id to pass it to backend
   const { selectedProject, setSelectedProject } = useProject();
-
-  setSelectedProject('93c73846-5c10-4325-968e-41be4baa2dbd');
-  // const { selectedProject } = useProject();
   const { id: routeChatId } = useParams();
   const {
     currentChatId,
@@ -473,6 +695,17 @@ export function ChatMessages() {
     activeChatIdRef.current = currentChatId ?? id ?? null;
   }, [currentChatId, id]);
 
+  // Set selected project from user's first spaceId if available
+  useEffect(() => {
+    if (user?.spaceIds && user.spaceIds.length > 0) {
+      // If current selectedProject is not in user's spaceIds (or is default), set to first spaceId
+      const isValidProject = selectedProject && user.spaceIds.includes(selectedProject);
+      if (!isValidProject || selectedProject === 'sm_project_default' || selectedProject === '93c73846-5c10-4325-968e-41be4baa2dbd') {
+        setSelectedProject(user.spaceIds[0]);
+      }
+    }
+  }, [user, selectedProject, setSelectedProject]);
+
   useEffect(() => {
     if (currentChatId) {
       const savedModel = sessionStorage.getItem(storageKey) as
@@ -703,6 +936,595 @@ export function ChatMessages() {
                                 <Spinner className="size-4 text-gray-900" /> Adding memory...
                               </div>
                             );
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-get_emails':
+                      case 'tool-getEmails': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Retrieving emails...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error retrieving emails
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const foundCount =
+                              typeof output === 'object' &&
+                              output !== null &&
+                              'count' in output
+                                ? Number(output.count) || 0
+                                : 0;
+                            const category =
+                              typeof output === 'object' && output !== null && 'category' in output
+                                ? String(output.category)
+                                : undefined;
+                            // @ts-expect-error
+                            const results = Array.isArray(output?.data)
+                              ? // @ts-expect-error
+                                output.data
+                              : [];
+
+                            return (
+                              <ExpandableEmails
+                                category={category}
+                                foundCount={foundCount}
+                                key={`${message.id}-${part.type}-${index}`}
+                                results={results}
+                              />
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-get_email_details':
+                      case 'tool-get-email-details':
+                      case 'tool-getEmailDetails': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Retrieving email details...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error retrieving email details
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const emailData =
+                              typeof output === 'object' &&
+                              output !== null &&
+                              'data' in output
+                                ? (output as { data: EmailDetailsData }).data
+                                : null;
+
+                            if (!emailData) {
+                              return (
+                                <div
+                                  className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                  key={`${message.id}-${part.type}-${index}`}
+                                >
+                                  <X className="size-4" /> No email details available
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <EmailDetails
+                                email={emailData}
+                                key={`${message.id}-${part.type}-${index}`}
+                              />
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-send_email':
+                      case 'tool-sendEmail': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Sending email...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error sending email
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const input = part.input;
+                            const emailData =
+                              typeof output === 'object' &&
+                              output !== null &&
+                              'data' in output
+                                ? (output as { data: { id?: string; threadId?: string; message?: string; labelIds?: string[] } }).data
+                                : null;
+                            const inputData =
+                              typeof input === 'object' && input !== null
+                                ? (input as { to?: string; subject?: string; body?: string })
+                                : null;
+
+                            if (!emailData || !emailData.message) {
+                              return (
+                                <div
+                                  className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                  key={`${message.id}-${part.type}-${index}`}
+                                >
+                                  <X className="size-4" /> Email send status unknown
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <div className="flex items-center gap-2 text-gray-900 mb-2">
+                                  <Check className="size-4 text-green-600" />
+                                  <span className="font-medium">{emailData.message}</span>
+                                </div>
+                                {inputData && (
+                                  <div className="ml-6 space-y-1 text-xs text-gray-900">
+                                    {inputData.to && (
+                                      <div>
+                                        <span className="font-medium text-gray-900">To:</span>{' '}
+                                        {inputData.to}
+                                      </div>
+                                    )}
+                                    {inputData.subject && (
+                                      <div>
+                                        <span className="font-medium text-gray-900">Subject:</span>{' '}
+                                        {inputData.subject}
+                                      </div>
+                                    )}
+                                    {emailData.id && (
+                                      <div className="text-xs text-gray-900 mt-1">
+                                        Email ID: {emailData.id}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-set_calendar_event':
+                      case 'tool-setCalendarEvent': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Creating calendar event...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error creating calendar event
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const input = part.input;
+                            const eventData =
+                              typeof output === 'object' && output !== null
+                                ? (output as { status?: string; summary?: string; htmlLink?: string })
+                                : null;
+                            const inputData =
+                              typeof input === 'object' && input !== null
+                                ? (input as {
+                                    summary?: string;
+                                    start?: { dateTime?: string; timeZone?: string };
+                                    end?: { dateTime?: string; timeZone?: string };
+                                    location?: string;
+                                    description?: string;
+                                    attendees?: string[];
+                                  })
+                                : null;
+
+                            const formatDateTime = (dateTime?: string, timeZone?: string) => {
+                              if (!dateTime) return '';
+                              try {
+                                const date = new Date(dateTime);
+                                return date.toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  timeZone: timeZone || 'UTC',
+                                });
+                              } catch {
+                                return dateTime;
+                              }
+                            };
+
+                            return (
+                              <div
+                                className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <div className="flex items-center gap-2 text-gray-900 mb-2">
+                                  <Check className="size-4 text-green-600" />
+                                  <span className="font-medium">
+                                    {eventData?.summary || inputData?.summary || 'Calendar event created'}
+                                  </span>
+                                </div>
+                                {inputData && (
+                                  <div className="ml-6 space-y-1.5 text-xs text-gray-900">
+                                    {inputData.start && (
+                                      <div className="flex items-start gap-2">
+                                        <Clock className="size-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
+                                        <div>
+                                          <div className="font-medium">Start:</div>
+                                          <div className="text-muted-foreground">
+                                            {formatDateTime(inputData.start.dateTime, inputData.start.timeZone)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {inputData.end && (
+                                      <div className="flex items-start gap-2">
+                                        <Clock className="size-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
+                                        <div>
+                                          <div className="font-medium">End:</div>
+                                          <div className="text-muted-foreground">
+                                            {formatDateTime(inputData.end.dateTime, inputData.end.timeZone)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {inputData.location && (
+                                      <div>
+                                        <span className="font-medium">Location:</span> {inputData.location}
+                                      </div>
+                                    )}
+                                    {inputData.attendees && inputData.attendees.length > 0 && (
+                                      <div>
+                                        <span className="font-medium">Attendees:</span>{' '}
+                                        {inputData.attendees.join(', ')}
+                                      </div>
+                                    )}
+                                    {eventData?.htmlLink && (
+                                      <a
+                                        className="text-blue-600 hover:underline flex items-center gap-1 mt-2"
+                                        href={eventData.htmlLink}
+                                        rel="noopener noreferrer"
+                                        target="_blank"
+                                      >
+                                        <Calendar className="size-3.5" />
+                                        View in Google Calendar
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-get_calendar_events':
+                      case 'tool-getCalendarEvents': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Fetching calendar events...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error fetching calendar events
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const events =
+                              typeof output === 'object' &&
+                              output !== null &&
+                              'events' in output &&
+                              Array.isArray((output as { events: any[] }).events)
+                                ? (output as { events: any[] }).events
+                                : [];
+
+                            if (events.length === 0) {
+                              return (
+                                <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
+                                  <Check className="size-4" /> No calendar events found
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
+                                <div className="flex items-center gap-2 text-gray-900 mb-2">
+                                  <Calendar className="size-4 text-blue-600" />
+                                  <span className="font-medium">{events.length} event{events.length !== 1 ? 's' : ''} found</span>
+                                </div>
+                                <div className="ml-6 space-y-2 max-h-64 overflow-y-auto">
+                                  {events.map((event: any, idx: number) => (
+                                    <div key={idx} className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0">
+                                      {event.summary && (
+                                        <div className="font-medium mb-1">{event.summary}</div>
+                                      )}
+                                      {event.start?.dateTime && (
+                                        <div className="text-muted-foreground">
+                                          {new Date(event.start.dateTime).toLocaleString()}
+                                        </div>
+                                      )}
+                                      {event.location && (
+                                        <div className="text-muted-foreground">📍 {event.location}</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-set_calendar_task':
+                      case 'tool-setCalendarTask': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Creating task...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error creating task
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const input = part.input;
+                            const taskData =
+                              typeof output === 'object' && output !== null
+                                ? (output as { status?: string; title?: string; id?: string })
+                                : null;
+                            const inputData =
+                              typeof input === 'object' && input !== null
+                                ? (input as { title?: string; description?: string; dueDate?: string; category?: string })
+                                : null;
+
+                            return (
+                              <div
+                                className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <div className="flex items-center gap-2 text-gray-900 mb-2">
+                                  <Check className="size-4 text-green-600" />
+                                  <span className="font-medium">
+                                    Task created: {taskData?.title || inputData?.title || 'Task'}
+                                  </span>
+                                </div>
+                                {inputData && (
+                                  <div className="ml-6 space-y-1 text-xs text-gray-900">
+                                    {inputData.description && (
+                                      <div>
+                                        <span className="font-medium">Description:</span> {inputData.description}
+                                      </div>
+                                    )}
+                                    {inputData.dueDate && (
+                                      <div>
+                                        <span className="font-medium">Due:</span>{' '}
+                                        {new Date(inputData.dueDate).toLocaleString()}
+                                      </div>
+                                    )}
+                                    {inputData.category && (
+                                      <div>
+                                        <span className="font-medium">Category:</span> {inputData.category}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-list_calendar_tasks':
+                      case 'tool-listCalendarTasks': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Fetching tasks...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error fetching tasks
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const tasks =
+                              typeof output === 'object' &&
+                              output !== null &&
+                              'tasks' in output &&
+                              Array.isArray((output as { tasks: any[] }).tasks)
+                                ? (output as { tasks: any[] }).tasks
+                                : [];
+
+                            if (tasks.length === 0) {
+                              return (
+                                <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
+                                  <Check className="size-4" /> No tasks found
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
+                                <div className="flex items-center gap-2 text-gray-900 mb-2">
+                                  <Check className="size-4 text-blue-600" />
+                                  <span className="font-medium">{tasks.length} task{tasks.length !== 1 ? 's' : ''} found</span>
+                                </div>
+                                <div className="ml-6 space-y-2 max-h-64 overflow-y-auto">
+                                  {tasks.map((task: any, idx: number) => (
+                                    <div key={idx} className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0">
+                                      <div className="flex items-center gap-2">
+                                        {task.status === 'completed' ? (
+                                          <Check className="size-3 text-green-600" />
+                                        ) : (
+                                          <div className="size-3 border border-gray-400 rounded" />
+                                        )}
+                                        <span className={task.status === 'completed' ? 'line-through text-muted-foreground' : 'font-medium'}>
+                                          {task.title}
+                                        </span>
+                                      </div>
+                                      {task.due && (
+                                        <div className="ml-5 text-muted-foreground">
+                                          Due: {new Date(task.due).toLocaleDateString()}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          }
+                          default:
+                            return null;
+                        }
+                      }
+                      case 'tool-fetch_memory':
+                      case 'tool-fetchMemory': {
+                        switch (part.state) {
+                          case 'input-available':
+                          case 'input-streaming':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <Spinner className="size-4" /> Fetching memory...
+                              </div>
+                            );
+                          case 'output-error':
+                            return (
+                              <div
+                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
+                                key={`${message.id}-${part.type}-${index}`}
+                              >
+                                <X className="size-4" /> Error fetching memory
+                              </div>
+                            );
+                          case 'output-available': {
+                            const output = part.output;
+                            const memoryData =
+                              typeof output === 'object' && output !== null
+                                ? (output as { title?: string; content?: string; id?: string })
+                                : null;
+
+                            if (!memoryData) {
+                              return (
+                                <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
+                                  <X className="size-4" /> Memory not found
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
+                                <div className="flex items-center gap-2 text-gray-900 mb-2">
+                                  <Check className="size-4 text-green-600" />
+                                  <span className="font-medium">Memory retrieved</span>
+                                </div>
+                                <div className="ml-6 space-y-1 text-xs text-gray-900">
+                                  {memoryData.title && (
+                                    <div className="font-medium text-sm mb-1">{memoryData.title}</div>
+                                  )}
+                                  {memoryData.content && (
+                                    <div className="text-muted-foreground">{memoryData.content}</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
                           default:
                             return null;
                         }
