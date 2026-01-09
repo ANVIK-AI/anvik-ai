@@ -233,6 +233,10 @@ app.get('/api/session', (req, res) => {
     isAuthenticated: req.isAuthenticated()
   });
 });
+app.get("/health",(req, res)=>{
+  
+  res.json({message:"server is running"})
+})
 app.use(errorHandler);
 
 export default app;
