@@ -155,6 +155,82 @@ export async function chatRequest(req: Request, res: Response) {
         },
       }),
 
+      search_contact: tool({
+        name: 'search_contact',
+        description:
+          "Search for a person's contact information (email, phone) in the user's memories. Use this to find email addresses before sending emails. Returns email addresses and any other contact details stored about a person.",
+        inputSchema: z.object({
+          personName: z
+            .string()
+            .describe(
+              "The name of the person to find contact information for (e.g., 'Ayush Patil', 'John').",
+            ),
+        }),
+        execute: async ({ personName }: { personName: string }) => {
+          console.log(`[Contact Search] Looking for: ${personName}, Project: ${projectId}`);
+          // Search memories for contact information
+          const searchQuery = `${personName} email contact phone number`;
+          const response = await memoryService.searchMemories(searchQuery, projectId);
+
+          if (!response.success || !response.results || response.results.length === 0) {
+            return {
+              found: false,
+              person: personName,
+              email: null,
+              phone: null,
+              note: `No contact information found for "${personName}" in memories.`,
+            };
+          }
+
+          // Extract email patterns from results
+          const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
+          const phonePattern = /(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g;
+
+          let foundEmails: string[] = [];
+          let foundPhones: string[] = [];
+          let relevantMemories: any[] = [];
+
+          for (const result of response.results.slice(0, 5)) {
+            const content = result.content || '';
+            const title = result.title || '';
+            const combined = `${title} ${content}`;
+
+            const emails = combined.match(emailPattern);
+            const phones = combined.match(phonePattern);
+
+            if (emails) foundEmails.push(...emails);
+            if (phones) foundPhones.push(...phones);
+
+            // Check if this memory mentions the person's name
+            if (combined.toLowerCase().includes(personName.toLowerCase())) {
+              relevantMemories.push({
+                title: result.title,
+                content: result.content,
+                score: result.score,
+              });
+            }
+          }
+
+          // Deduplicate
+          foundEmails = [...new Set(foundEmails)];
+          foundPhones = [...new Set(foundPhones)];
+
+          return {
+            found: foundEmails.length > 0 || foundPhones.length > 0,
+            person: personName,
+            email: foundEmails.length > 0 ? foundEmails[0] : null,
+            allEmails: foundEmails,
+            phone: foundPhones.length > 0 ? foundPhones[0] : null,
+            allPhones: foundPhones,
+            memories: relevantMemories.slice(0, 3),
+            note:
+              foundEmails.length > 0
+                ? `Found ${foundEmails.length} email(s) for ${personName}.`
+                : `No email found for "${personName}". You may need to ask the user for the email address.`,
+          };
+        },
+      }),
+
       get_calendar_events: tool({
         name: 'get_calendar_events',
         description: 'Get a list of Google Calendar events for a specific date range.',
@@ -529,6 +605,79 @@ export async function chatRequestWithID(req: Request, res: Response) {
           return await memoryService.fetchMemory(memoryId, projectId);
         },
       }),
+
+      search_contact: tool({
+        name: 'search_contact',
+        description:
+          "Search for a person's contact information (email, phone) in the user's memories. Use this to find email addresses before sending emails. Returns email addresses and any other contact details stored about a person.",
+        inputSchema: z.object({
+          personName: z
+            .string()
+            .describe(
+              "The name of the person to find contact information for (e.g., 'Ayush Patil', 'John').",
+            ),
+        }),
+        execute: async ({ personName }: { personName: string }) => {
+          console.log(`[Contact Search] Looking for: ${personName}, Project: ${projectId}`);
+          const searchQuery = `${personName} email contact phone number`;
+          const response = await memoryService.searchMemories(searchQuery, projectId);
+
+          if (!response.success || !response.results || response.results.length === 0) {
+            return {
+              found: false,
+              person: personName,
+              email: null,
+              phone: null,
+              note: `No contact information found for "${personName}" in memories.`,
+            };
+          }
+
+          const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
+          const phonePattern = /(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g;
+
+          let foundEmails: string[] = [];
+          let foundPhones: string[] = [];
+          let relevantMemories: any[] = [];
+
+          for (const result of response.results.slice(0, 5)) {
+            const content = result.content || '';
+            const title = result.title || '';
+            const combined = `${title} ${content}`;
+
+            const emails = combined.match(emailPattern);
+            const phones = combined.match(phonePattern);
+
+            if (emails) foundEmails.push(...emails);
+            if (phones) foundPhones.push(...phones);
+
+            if (combined.toLowerCase().includes(personName.toLowerCase())) {
+              relevantMemories.push({
+                title: result.title,
+                content: result.content,
+                score: result.score,
+              });
+            }
+          }
+
+          foundEmails = [...new Set(foundEmails)];
+          foundPhones = [...new Set(foundPhones)];
+
+          return {
+            found: foundEmails.length > 0 || foundPhones.length > 0,
+            person: personName,
+            email: foundEmails.length > 0 ? foundEmails[0] : null,
+            allEmails: foundEmails,
+            phone: foundPhones.length > 0 ? foundPhones[0] : null,
+            allPhones: foundPhones,
+            memories: relevantMemories.slice(0, 3),
+            note:
+              foundEmails.length > 0
+                ? `Found ${foundEmails.length} email(s) for ${personName}.`
+                : `No email found for "${personName}". You may need to ask the user for the email address.`,
+          };
+        },
+      }),
+
       get_calendar_events: tool({
         name: 'get_calendar_events',
         description: 'Get a list of Google Calendar events for a specific date range.',
@@ -543,12 +692,13 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
       set_calendar_event: tool({
         name: 'set_calendar_event',
-        description: 'Set a calendar event. All times must include a timezone.',
+        description:
+          "Schedule a calendar event. If the user doesn't specify a year/date, INFER it from the current date. For 'tomorrow' or 'next friday', calculate the actual ISO date.",
         inputSchema: z.object({
           summary: z.string().describe('The title or summary of the event.'),
           start: z.object({
-            dateTime: z.string().describe("ISO 8601 format, e.g., '2025-11-20T09:00:00-07:00'"),
-            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'"),
+            dateTime: z.string().describe("ISO 8601 format (e.g. '2025-11-20T09:00:00-07:00')."),
+            timeZone: z.string().describe("The timezone (e.g. 'America/Los_Angeles')."),
           }),
           end: z.object({
             dateTime: z.string().describe('ISO 8601 format'),
@@ -608,12 +758,15 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
       get_emails: tool({
         name: 'get_emails',
-        description: 'List emails with metadata (Subject, Sender, Date). Optimized for lists.',
+        description:
+          'List emails to find information or specific messages. USE THIS TO FIND CONTACTS OR EMAIL ADDRESSES by searching for their name (e.g. filter: "Ayush").',
         inputSchema: z.object({
           filter: z
             .string()
             .optional()
-            .describe("Specific Gmail search query like 'from:boss@gmail.com'."),
+            .describe(
+              "Gmail search query. To find a person's email, search for their name here (e.g. 'Ayush'). OR use standard queries like 'from:boss@gmail.com'.",
+            ),
           category: z
             .enum(['INBOX', 'SENT', 'DRAFT', 'STARRED', 'ARCHIVED', 'SPAM', 'ALL'])
             .optional()

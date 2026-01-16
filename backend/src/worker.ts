@@ -339,6 +339,14 @@ export async function registerWorkers() {
                   },
                 });
 
+                // Update column with the vector for pgvector search
+                const vectorStr = JSON.stringify(emb.embedding.values);
+                await prisma.$executeRaw`
+                  UPDATE "memory_entries"
+                  SET "embedding" = ${vectorStr}::vector
+                  WHERE "id" = ${memoryId}
+                `;
+
                 await prisma.memoryDocumentSource.create({
                   data: {
                     memoryEntryId: memoryId,

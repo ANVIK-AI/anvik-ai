@@ -91,102 +91,68 @@ export class MemoryService {
   }> {
     try {
       logger.info({
-        msg: 'Searching memories',
+        msg: 'Searching memories (pgvector)',
         projectId,
         queryLength: query?.length ?? 0,
       });
       // Generate embedding for the query
       const queryEmbedding = await this.generateEmbedding(query);
-      // const queryEmbeddingStr = JSON.stringify(queryEmbedding);
+      const queryVector = JSON.stringify(queryEmbedding);
 
-      // Search memories using vector similarity
-      // Prefer the new embedding field, but fall back to legacy if needed
-      const memories = await prisma.memoryEntry.findMany({
-        where: {
-          spaceId: projectId,
-          isLatest: true,
-          isForgotten: false,
-          OR: [{ memoryEmbeddingNew: { not: null } }, { memoryEmbedding: { not: null } }],
-        },
-        select: {
-          id: true,
-          memory: true,
-          metadata: true,
-          memoryEmbeddingNew: true,
-          memoryEmbedding: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 25,
-      });
-
-      logger.debug({
-        msg: 'Fetched candidate memories',
-        projectId,
-        candidates: memories.length,
-      });
-
-      // Calculate similarity scores and sort
-      const resultsWithScores = await Promise.all(
-        memories.map(async (memory) => {
-          const rawEmbedding = memory.memoryEmbeddingNew ?? memory.memoryEmbedding;
-          if (!rawEmbedding) return null;
-
-          try {
-            const memoryEmbedding = JSON.parse(rawEmbedding);
-            if (
-              !Array.isArray(memoryEmbedding) ||
-              memoryEmbedding.length !== queryEmbedding.length
-            ) {
-              logger.warn({
-                msg: 'Embedding dimension mismatch; skipping',
-                memoryId: memory.id,
-                memoryDim: Array.isArray(memoryEmbedding) ? memoryEmbedding.length : 'invalid',
-                queryDim: queryEmbedding.length,
-              });
-              return null;
-            }
-            const score = this.calculateCosineSimilarity(queryEmbedding, memoryEmbedding);
-
-            return {
-              documentId: memory.id,
-              title: (memory.metadata as any)?.title || this.extractTitleFromMemory(memory.memory),
-              content: memory.memory,
-              score: score,
-              url: (memory.metadata as any)?.url,
-              createdAt: memory.createdAt,
-            };
-          } catch (error) {
-            logger.warn({
-              msg: 'Error parsing memory embedding; skipping',
-              memoryId: memory.id,
-              error,
-            });
-            return null;
-          }
-        }),
-      );
-
-      // Filter out nulls and sort by score with threshold
-      const minSim = this.getMinSimilarity();
+      // Execute raw SQL query for cosine distance
+      // Similarity = 1 - Cosine Distance (provided by <=> operator)
       const topK = this.getTopK();
-      const validResults = resultsWithScores
-        .filter(
-          (result): result is NonNullable<typeof result> =>
-            result !== null && (result.score || 0) >= minSim,
-        )
-        .sort((a, b) => (b.score || 0) - (a.score || 0))
-        .slice(0, topK);
+      const minSim = this.getMinSimilarity();
+
+      // Note: We filter by score >= minSim in the WHERE clause or after?
+      // For efficiency, we can fetch top K first, then filter, or filter in SQL.
+      // Filtering in SQL by distance: WHERE (1 - (embedding <=> vector)) >= minSim
+      // Equivalent to: WHERE (embedding <=> vector) <= (1 - minSim)
+
+      const maxDistance = 1 - minSim;
+
+      const memories = await prisma.$queryRaw<Array<{
+        id: string;
+        memory: string;
+        metadata: any;
+        score: number;
+        createdAt: Date;
+      }>>`
+        SELECT
+          id,
+          memory,
+          metadata,
+          "createdAt",
+          1 - (embedding <=> ${queryVector}::vector) as score
+        FROM "memory_entries"
+        WHERE "spaceId" = ${projectId}
+          AND "isLatest" = true
+          AND "isForgotten" = false
+          AND "embedding" IS NOT NULL
+          AND (embedding <=> ${queryVector}::vector) <= ${maxDistance}
+        ORDER BY embedding <=> ${queryVector}::vector ASC
+        LIMIT ${topK}
+      `;
 
       logger.info({
         msg: 'Search completed',
         projectId,
-        returned: validResults.length,
+        returned: memories.length,
       });
+
+      const results = memories.map((m) => ({
+        documentId: m.id,
+        title: (m.metadata as any)?.title || this.extractTitleFromMemory(m.memory),
+        content: m.memory,
+        score: m.score,
+        url: (m.metadata as any)?.url,
+        createdAt: m.createdAt,
+      }));
+
       return {
         success: true,
-        count: validResults.length,
-        results: validResults,
+        count: results.length,
+        results: results,
       };
     } catch (error) {
       logger.error({ msg: 'Error searching memories', projectId, error });
@@ -230,50 +196,39 @@ export class MemoryService {
       const embedding = await this.generateEmbedding(memory);
       const embeddingStr = JSON.stringify(embedding);
 
-      // Find related existing memories (latest, same space) by cosine similarity
-      const candidateLatest = await prisma.memoryEntry.findMany({
-        where: {
-          spaceId: projectId,
-          isLatest: true,
-          isForgotten: false,
-          OR: [{ memoryEmbeddingNew: { not: null } }, { memoryEmbedding: { not: null } }],
-        },
-        select: {
-          id: true,
-          memory: true,
-          memoryEmbeddingNew: true,
-          memoryEmbedding: true,
-          version: true,
-          parentMemoryId: true,
-          rootMemoryId: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      });
-
-      const scored = candidateLatest
-        .map((m) => {
-          const raw = m.memoryEmbeddingNew ?? m.memoryEmbedding;
-          if (!raw) return null;
-          try {
-            const vec = JSON.parse(raw);
-            if (!Array.isArray(vec) || vec.length !== embedding.length) return null;
-            const score = this.calculateCosineSimilarity(embedding, vec);
-            return { m, score };
-          } catch {
-            return null;
-          }
-        })
-        .filter((x): x is { m: (typeof candidateLatest)[number]; score: number } => !!x)
-        .sort((a, b) => b.score - a.score);
-
+      // Find related existing memories (latest, same space) by cosine similarity using pgvector
       const minUpdateSim = this.getUpdateMinSimilarity();
+      const maxUpdateDist = 1 - minUpdateSim;
       const maxParents = this.getUpdateMaxParents();
-      const parents = scored.filter((s) => s.score >= minUpdateSim).slice(0, maxParents);
+
+      // Fetch potential parents using vector search
+      const candidateLatest = await prisma.$queryRaw<Array<{
+        id: string;
+        memory: string;
+        version: number;
+        "parentMemoryId": string | null;
+        "rootMemoryId": string | null;
+        score: number;
+      }>>`
+        SELECT
+          id,
+          memory,
+          version,
+          "parentMemoryId",
+          "rootMemoryId",
+          1 - (embedding <=> ${embeddingStr}::vector) as score
+        FROM "memory_entries"
+        WHERE "spaceId" = ${projectId}
+          AND "isLatest" = true
+          AND "isForgotten" = false
+          AND "embedding" IS NOT NULL
+          AND (embedding <=> ${embeddingStr}::vector) <= ${maxUpdateDist}
+        ORDER BY embedding <=> ${embeddingStr}::vector ASC
+        LIMIT ${maxParents}
+      `;
 
       // Prepare versioning fields if an update parent is found (pick best one)
-      const primaryParent = parents[0]?.m;
+      const primaryParent = candidateLatest[0];
       const version = primaryParent ? (primaryParent.version || 1) + 1 : 1;
       const parentMemoryId = primaryParent ? primaryParent.id : null;
       const rootMemoryId = primaryParent ? primaryParent.rootMemoryId || primaryParent.id : null;
@@ -307,6 +262,7 @@ export class MemoryService {
             memoryRelations: memoryRelations as any,
             memoryEmbeddingNew: embeddingStr,
             memoryEmbeddingNewModel: embeddingModelName(),
+            // note: embedding (vector) is inserted via raw query below
             metadata: {
               title: this.extractTitleFromMemory(memory),
               createdAt: new Date().toISOString(),
@@ -347,6 +303,13 @@ export class MemoryService {
             metadata: { linkedBy: 'chat.service.addMemory' },
           },
         });
+
+        // Update column with the vector
+        await tx.$executeRaw`
+          UPDATE "memory_entries"
+          SET "embedding" = ${embeddingStr}::vector
+          WHERE "id" = ${memoryEntry.id}
+        `;
 
         return { memoryEntry };
       });
