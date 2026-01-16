@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 import { useProject } from '@/stores';
+import { useAuth } from '@/context/AuthContext';
 
 // Define types
 type Connection = z.infer<typeof ConnectionResponseSchema>;
@@ -40,9 +41,21 @@ type ConnectorProvider = keyof typeof CONNECTORS;
 
 export function ConnectionsTabContent() {
   const queryClient = useQueryClient();
-  const { selectedProject } = useProject();
+  const { user } = useAuth();
+  const { selectedProject, setSelectedProject } = useProject();
   const autumn = useCustomer();
   const [isProUser, setIsProUser] = useState(false);
+
+  // Validate that selectedProject belongs to current user
+  useEffect(() => {
+    if (user?.spaceIds && user.spaceIds.length > 0) {
+      const isValidProject = selectedProject && user.spaceIds.includes(selectedProject);
+      if (!isValidProject) {
+        console.log(`[ConnectionsTabContent] Project reset: "${selectedProject}" not in user's spaces`);
+        setSelectedProject(user.spaceIds[0]);
+      }
+    }
+  }, [user, selectedProject, setSelectedProject]);
 
   const handleUpgrade = async () => {
     try {

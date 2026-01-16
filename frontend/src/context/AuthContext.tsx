@@ -70,7 +70,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await axios.post(import.meta.env.VITE_PUBLIC_BACKEND_URL + '/auth/logout', {}, { withCredentials: true });
       setUser(null);
-      // Optional: Redirect to home page
+      // Clear persisted project selection to prevent data leakage between accounts
+      localStorage.removeItem('selectedProject');
+      // Also clear chat-related localStorage
+      localStorage.removeItem('anvik-chat-store');
+      // Redirect to home page
       window.location.href = '/';
     } catch (error) {
       console.error('Logout failed:', error);

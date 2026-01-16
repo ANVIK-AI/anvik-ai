@@ -723,15 +723,14 @@ export function ChatMessages() {
   }, [currentChatId, id]);
 
   // Set selected project from user's first spaceId if available
+  // IMPORTANT: Always validate that selectedProject belongs to current user to prevent cross-account data access
   useEffect(() => {
     if (user?.spaceIds && user.spaceIds.length > 0) {
-      // If current selectedProject is not in user's spaceIds (or is default), set to first spaceId
+      // Check if current selectedProject belongs to this user's spaces
       const isValidProject = selectedProject && user.spaceIds.includes(selectedProject);
-      if (
-        !isValidProject ||
-        selectedProject === 'sm_project_default' ||
-        selectedProject === '93c73846-5c10-4325-968e-41be4baa2dbd'
-      ) {
+      if (!isValidProject) {
+        // Reset to user's first space to ensure proper data isolation
+        console.log(`[Project Reset] Resetting project from "${selectedProject}" to user's first space: "${user.spaceIds[0]}"`);
         setSelectedProject(user.spaceIds[0]);
       }
     }
@@ -837,7 +836,7 @@ export function ChatMessages() {
       if (documentIds.length > 0) {
         setDocumentIds(documentIds);
       }
-    } catch {}
+    } catch { }
   }, [messages]);
 
   useEffect(() => {

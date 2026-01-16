@@ -32,6 +32,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { useProject } from '@/stores';
+import { useAuth } from '@/context/AuthContext';
 import { ConnectionsTabContent } from '../connections-tab-content';
 import { ActionButtons } from './action-buttons';
 import { MemoryUsageRing } from '@/components/views/add-memory/memory-usage-ring';
@@ -48,11 +49,23 @@ export function AddMemoryView({
   initialTab?: 'note' | 'link' | 'file' | 'connect';
 }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { selectedProject, setSelectedProject } = useProject();
   const [showAddDialog, setShowAddDialog] = useState(true);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [activeTab, setActiveTab] = useState<'note' | 'link' | 'file' | 'connect'>(initialTab);
   const autumn = useCustomer();
+
+  // Validate that selectedProject belongs to current user to prevent cross-account memory creation
+  useEffect(() => {
+    if (user?.spaceIds && user.spaceIds.length > 0) {
+      const isValidProject = selectedProject && user.spaceIds.includes(selectedProject);
+      if (!isValidProject) {
+        console.log(`[AddMemoryView] Project reset: "${selectedProject}" not in user's spaces`);
+        setSelectedProject(user.spaceIds[0]);
+      }
+    }
+  }, [user, selectedProject, setSelectedProject]);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
 
@@ -297,10 +310,10 @@ export function AddMemoryView({
         console.log('🔄 Old data:', old);
         const newData = old
           ? {
-              ...old,
-              documents: [optimisticMemory, ...(old.documents || [])],
-              totalCount: (old.totalCount || 0) + 1,
-            }
+            ...old,
+            documents: [optimisticMemory, ...(old.documents || [])],
+            totalCount: (old.totalCount || 0) + 1,
+          }
           : { documents: [optimisticMemory], totalCount: 1 };
         console.log('✨ New data:', newData);
         return newData;
@@ -616,9 +629,8 @@ export function AddMemoryView({
                       {/* Project Selection */}
                       <motion.div
                         animate={{ opacity: 1, y: 0 }}
-                        className={`flex flex-col gap-2 flex-1 sm:flex-initial ${
-                          addContentMutation.isPending ? 'opacity-50' : ''
-                        }`}
+                        className={`flex flex-col gap-2 flex-1 sm:flex-initial ${addContentMutation.isPending ? 'opacity-50' : ''
+                          }`}
                         initial={{ opacity: 0, y: 10 }}
                         transition={{ delay: 0.15 }}
                       >
@@ -694,9 +706,8 @@ export function AddMemoryView({
                         {({ state, handleChange, handleBlur }) => (
                           <>
                             <Input
-                              className={`bg-black/5 border-black/10 ${
-                                addContentMutation.isPending ? 'opacity-50' : ''
-                              }`}
+                              className={`bg-black/5 border-black/10 ${addContentMutation.isPending ? 'opacity-50' : ''
+                                }`}
                               disabled={addContentMutation.isPending}
                               id="link-content"
                               onBlur={handleBlur}
@@ -730,9 +741,8 @@ export function AddMemoryView({
                       {/* Left side - Project Selection */}
                       <motion.div
                         animate={{ opacity: 1, y: 0 }}
-                        className={`flex flex-col gap-2 ${
-                          addContentMutation.isPending ? 'opacity-50' : ''
-                        }`}
+                        className={`flex flex-col gap-2 ${addContentMutation.isPending ? 'opacity-50' : ''
+                          }`}
                         initial={{ opacity: 0, y: 10 }}
                         transition={{ delay: 0.15 }}
                       >
@@ -862,9 +872,8 @@ export function AddMemoryView({
                       {/* Left side - Project Selection */}
                       <motion.div
                         animate={{ opacity: 1, y: 0 }}
-                        className={`flex flex-col gap-2 flex-1 sm:flex-initial ${
-                          fileUploadMutation.isPending ? 'opacity-50' : ''
-                        }`}
+                        className={`flex flex-col gap-2 flex-1 sm:flex-initial ${fileUploadMutation.isPending ? 'opacity-50' : ''
+                          }`}
                         initial={{ opacity: 0, y: 10 }}
                         transition={{ delay: 0.25 }}
                       >
