@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import app from './app.js';
 import logger from './utils/logger.js';
-import { startBoss } from './queue';
-import { registerWorkers } from './worker';
+import { startBoss } from './queue.js';
+import { registerWorkers } from './worker.js';
 
 const PORT = process.env.PORT || 4000;
 

@@ -2,7 +2,7 @@
 // const router = express.Router();
 import { Router } from "express";
 import passport from "passport";
-import { googleCallback, logout } from "../controller/auth.controller";
+import { googleCallback, logout } from "../controller/auth.controller.js";
 const router=Router()
 router.get('/google',
   passport.authenticate('google', { 

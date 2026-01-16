@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { chatRequest, chatTitleRequest,chatRequestWithID } from "../controller/chat.controller";
-import prisma from "../db/prismaClient";
-import { isAuthenticated } from "../middleware/auth.middleware";
+import { chatRequest, chatTitleRequest,chatRequestWithID } from "../controller/chat.controller.js";
+import prisma from "../db/prismaClient.js";
+import { isAuthenticated } from "../middleware/auth.middleware.js";
 const router = Router();
 
 router.post("/chat" ,isAuthenticated,chatRequest);

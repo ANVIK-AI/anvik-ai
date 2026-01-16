@@ -1,5 +1,5 @@
 // const AuthService = require('../services/auth.service');
-import { AuthService } from "../services/auth.service";
+// import { AuthService } from "../services/auth.service";
 export const googleAuth = (req:any, res:any, next:any) => {
   // This will be handled by passport
 };

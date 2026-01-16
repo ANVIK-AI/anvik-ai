@@ -1,7 +1,7 @@
-import { boss, JOB_PROCESS_DOCUMENT } from './queue';
-import prisma from './db/prismaClient';
+import { boss, JOB_PROCESS_DOCUMENT } from './queue.js';
+import prisma from './db/prismaClient.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { embeddingModelName } from './gemini';
+import { embeddingModelName } from './gemini.js';
 import { v4 as uuidv4 } from 'uuid';
 import { PDFParse } from 'pdf-parse';
 import path from 'path';

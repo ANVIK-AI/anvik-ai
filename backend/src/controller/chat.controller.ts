@@ -1,12 +1,12 @@
 import type { Request, Response } from 'express';
 import { streamText, tool } from 'ai';
 import { google } from '@ai-sdk/google';
-import prisma from '../db/prismaClient';
+import prisma from '../db/prismaClient.js';
 import { z } from 'zod';
-import { MemoryService } from '../services/chat.service';
+import { MemoryService } from '../services/chat.service.js';
 import { convertToModelMessages } from 'ai';
-import { getEmails, sendEmail, getEmailDetails } from "../agents/email.agent"
-import { getCalendarEvents, setCalendarEvent, setBirthdayEvent,  listCalendarTasks, setCalendarTask } from "../agents/calendar.agent"
+import { getEmails, sendEmail, getEmailDetails } from "../agents/email.agent.js"
+import { getCalendarEvents, setCalendarEvent, setBirthdayEvent,  listCalendarTasks, setCalendarTask } from "../agents/calendar.agent.js"
 
 
 const chatRequestSchema = z.object({

@@ -10,7 +10,7 @@ import {
   MemoryEntrySchema,
   OrganizationSettingsSchema,
   RequestTypeEnum,
-} from './schemas.ts';
+} from './schemas.js';
 
 export const MetadataSchema = BaseMetadataSchema;
 
