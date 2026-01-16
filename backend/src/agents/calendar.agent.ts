@@ -19,7 +19,7 @@ const calenderTest=async (req, res) => {
 
   console.log("calender event triggered")
   // console.log("args", args);
-  const {userId, refreshToken, minTime, maxTime}=req.body;
+  let {userId, refreshToken, minTime, maxTime}=req.body;
   console.log("userId", userId);
   console.log("refreshToken", refreshToken);
   console.log("minTime", minTime);
@@ -91,8 +91,8 @@ const calenderTest=async (req, res) => {
     res.status(200).json({ events: simplifiedEvents });
     return { events: simplifiedEvents };
 
-  } catch (error) {
-    console.error('Error fetching calendar:', error.message);
+  } catch (error: any) {
+    console.error('Error fetching calendar:', error?.message);
     console.error('Error is ... ', error);
     if (error.response?.data?.error === 'invalid_grant') {
       return { error: "Permission denied. Please re-link your Google account." };
@@ -195,7 +195,7 @@ const setCalendarEvent = async (args, userId) => {
     });
 
     // 3. Create an authenticated calendar service
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar:any = google.calendar({ version: 'v3', auth: oauth2Client });
 
     // 4. Build the event resource for the API.
     //    Because our tool config is clean, 'args' maps almost 1:1.
@@ -217,7 +217,7 @@ const setCalendarEvent = async (args, userId) => {
     };
 
     // 5. Make the API call to insert the event
-    const result = await calendar.events.insert({
+    const result:any = await calendar.events?.insert({
       calendarId: 'primary',
       resource: eventResource,
       sendNotifications: true, // This sends email invites to attendees
@@ -226,11 +226,11 @@ const setCalendarEvent = async (args, userId) => {
     // 6. Return a simple, clean success message for the model
     return { 
       status: "success",
-      summary: result.data.summary,
-      htmlLink: result.data.htmlLink // This is the link to the event
+      summary: result?.data.summary,
+      htmlLink: result?.data.htmlLink // This is the link to the event
     };
 
-  } catch (error) {
+  } catch (error:any) {
     // Handle errors cleanly
     console.error('Error creating calendar event:', error.message);
     
@@ -406,7 +406,7 @@ const setCalendarTask = async (args, userId) => {
       }
     };
 
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error creating Google Task:', error.message);
     
     // Handle specific API errors
@@ -427,7 +427,7 @@ const setCalendarTask = async (args, userId) => {
 };
 
 
-const listCalendarTasks = async (args, userId) => {
+const listCalendarTasks = async (args, userId ) => {
   try {
     // --- 0. Input Defaults ---
     // groupBy: 'category' (default), 'status', or 'none'
@@ -470,7 +470,7 @@ const listCalendarTasks = async (args, userId) => {
     const fetchPromises = targetLists.map(async (list) => {
       try {
         const res = await service.tasks.list({
-          tasklist: list.id,
+          tasklist: list.id as string,
           showCompleted: showCompleted,
           showHidden: showHidden,
           // API supports date filtering directly:
