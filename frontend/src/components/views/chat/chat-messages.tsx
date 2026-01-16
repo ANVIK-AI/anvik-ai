@@ -1,8 +1,27 @@
 import { useChat, useCompletion } from '@ai-sdk/react';
 import { cn } from '@lib/utils';
 import { Button } from '@ui/components/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@ui/components/select';
 import { DefaultChatTransport } from 'ai';
-import { ArrowUp, Calendar, Check, ChevronDown, ChevronRight, Clock, Copy, Mail, RotateCcw, X } from 'lucide-react';
+import {
+  ArrowUp,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Copy,
+  Mail,
+  RotateCcw,
+  X,
+  Sparkles,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -190,9 +209,7 @@ function ExpandableEmails({ foundCount, results, category }: ExpandableEmailsPro
                   </div>
                 )}
                 {email.date && (
-                  <div className="text-xs text-muted-foreground mb-2">
-                    {formatDate(email.date)}
-                  </div>
+                  <div className="text-xs text-muted-foreground mb-2">{formatDate(email.date)}</div>
                 )}
                 {email.snippet && (
                   <div className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
@@ -413,7 +430,7 @@ function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
 }
 
 export function ChatMessages() {
-  const {user}=useAuth();
+  const { user } = useAuth();
   const { selectedProject, setSelectedProject } = useProject();
   const { id: routeChatId } = useParams();
   const {
@@ -427,13 +444,34 @@ export function ChatMessages() {
 
   const storageKey = `chat-model-${currentChatId}`;
 
+  // Available AI models - Gemini (default) and Groq models
+  type ModelType =
+    | 'gemini-2.5-flash'
+    | 'gemini-2.5-pro'
+    | 'qwen/qwen3-32b'
+    | 'llama-3.3-70b-versatile'
+    | 'deepseek-r1-distill-llama-70b';
+
+  const MODEL_OPTIONS: { value: ModelType; label: string; provider: string }[] = [
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
+    { value: 'qwen/qwen3-32b', label: 'Qwen3 32B', provider: 'Groq' },
+    { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', provider: 'Groq' },
+    { value: 'deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 70B', provider: 'Groq' },
+  ];
+
   const [input, setInput] = useState('');
-  const [selectedModel, setSelectedModel] = useState<
-    'gpt-5' | 'claude-sonnet-4.5' | 'gemini-2.5-pro'
-  >(
-    (sessionStorage.getItem(storageKey) as 'gpt-5' | 'claude-sonnet-4.5' | 'gemini-2.5-pro') ||
-      'gemini-2.5-pro',
+  const [selectedModel, setSelectedModel] = useState<ModelType>(
+    (sessionStorage.getItem(storageKey) as ModelType) || 'gemini-2.5-flash',
   );
+
+  // Persist model selection to sessionStorage
+  useEffect(() => {
+    if (selectedModel) {
+      sessionStorage.setItem(storageKey, selectedModel);
+    }
+  }, [selectedModel, storageKey]);
+
   const activeChatIdRef = useRef<string | null>(null);
   const shouldGenerateTitleRef = useRef<boolean>(false);
   const hasRunInitialMessageRef = useRef<boolean>(false);
@@ -468,9 +506,12 @@ export function ChatMessages() {
 
         // Add timeout to prevent hanging (5 minutes for streaming responses)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, 5 * 60 * 1000); // 5 minutes
+        const timeoutId = setTimeout(
+          () => {
+            controller.abort();
+          },
+          5 * 60 * 1000,
+        ); // 5 minutes
 
         return fetch(url, {
           ...options,
@@ -502,13 +543,45 @@ export function ChatMessages() {
     },
     onError: (error) => {
       console.error('❌ Chat error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred while chatting';
-      
-      // Show user-friendly error message
-      if (errorMessage.includes('connect') || errorMessage.includes('network') || errorMessage.includes('fetch')) {
-        toast.error('Unable to connect to the chat service. Please check your internet connection and try again.');
+      const errorMessage =
+        error instanceof Error ? error.message : 'An error occurred while chatting';
+
+      // Determine current provider for error context
+      const isGroqModel =
+        selectedModel.includes('qwen') ||
+        selectedModel.includes('llama') ||
+        selectedModel.includes('deepseek');
+      const providerName = isGroqModel ? 'Groq' : 'Gemini';
+
+      // Show user-friendly error message with provider context
+      if (
+        errorMessage.includes('connect') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('fetch')
+      ) {
+        toast.error(
+          'Unable to connect to the chat service. Please check your internet connection and try again.',
+        );
       } else if (errorMessage.includes('AI service') || errorMessage.includes('ENOTFOUND')) {
-        toast.error('Unable to reach the AI service. Please check your internet connection and try again.');
+        toast.error(
+          `Unable to reach the ${providerName} AI service. Please check your internet connection and try again.`,
+        );
+      } else if (
+        errorMessage.includes('API key') ||
+        errorMessage.includes('401') ||
+        errorMessage.includes('403')
+      ) {
+        toast.error(
+          `${providerName} API key is invalid or not configured. Please check the backend configuration.`,
+        );
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        toast.error(
+          `${providerName} rate limit exceeded. Please wait a moment and try again, or switch to a different model.`,
+        );
+      } else if (errorMessage.includes('model') || errorMessage.includes('not found')) {
+        toast.error(
+          `The selected model "${selectedModel}" is not available. Please try a different model.`,
+        );
       } else {
         toast.error(`Chat error: ${errorMessage}`);
       }
@@ -718,7 +791,11 @@ export function ChatMessages() {
     if (user?.spaceIds && user.spaceIds.length > 0) {
       // If current selectedProject is not in user's spaceIds (or is default), set to first spaceId
       const isValidProject = selectedProject && user.spaceIds.includes(selectedProject);
-      if (!isValidProject || selectedProject === 'sm_project_default' || selectedProject === '93c73846-5c10-4325-968e-41be4baa2dbd') {
+      if (
+        !isValidProject ||
+        selectedProject === 'sm_project_default' ||
+        selectedProject === '93c73846-5c10-4325-968e-41be4baa2dbd'
+      ) {
         setSelectedProject(user.spaceIds[0]);
       }
     }
@@ -726,12 +803,10 @@ export function ChatMessages() {
 
   useEffect(() => {
     if (currentChatId) {
-      const savedModel = sessionStorage.getItem(storageKey) as
-        | 'gpt-5'
-        | 'claude-sonnet-4.5'
-        | 'gemini-2.5-pro';
+      const savedModel = sessionStorage.getItem(storageKey) as ModelType | null;
+      const validModels: ModelType[] = MODEL_OPTIONS.map((m) => m.value);
 
-      if (savedModel && ['gpt-5', 'claude-sonnet-4.5', 'gemini-2.5-pro'].includes(savedModel)) {
+      if (savedModel && validModels.includes(savedModel)) {
         setSelectedModel(savedModel);
       }
     }
@@ -983,9 +1058,7 @@ export function ChatMessages() {
                           case 'output-available': {
                             const output = part.output;
                             const foundCount =
-                              typeof output === 'object' &&
-                              output !== null &&
-                              'count' in output
+                              typeof output === 'object' && output !== null && 'count' in output
                                 ? Number(output.count) || 0
                                 : 0;
                             const category =
@@ -1037,9 +1110,7 @@ export function ChatMessages() {
                           case 'output-available': {
                             const output = part.output;
                             const emailData =
-                              typeof output === 'object' &&
-                              output !== null &&
-                              'data' in output
+                              typeof output === 'object' && output !== null && 'data' in output
                                 ? (output as { data: EmailDetailsData }).data
                                 : null;
 
@@ -1091,10 +1162,17 @@ export function ChatMessages() {
                             const output = part.output;
                             const input = part.input;
                             const emailData =
-                              typeof output === 'object' &&
-                              output !== null &&
-                              'data' in output
-                                ? (output as { data: { id?: string; threadId?: string; message?: string; labelIds?: string[] } }).data
+                              typeof output === 'object' && output !== null && 'data' in output
+                                ? (
+                                    output as {
+                                      data: {
+                                        id?: string;
+                                        threadId?: string;
+                                        message?: string;
+                                        labelIds?: string[];
+                                      };
+                                    }
+                                  ).data
                                 : null;
                             const inputData =
                               typeof input === 'object' && input !== null
@@ -1176,7 +1254,11 @@ export function ChatMessages() {
                             const input = part.input;
                             const eventData =
                               typeof output === 'object' && output !== null
-                                ? (output as { status?: string; summary?: string; htmlLink?: string })
+                                ? (output as {
+                                    status?: string;
+                                    summary?: string;
+                                    htmlLink?: string;
+                                  })
                                 : null;
                             const inputData =
                               typeof input === 'object' && input !== null
@@ -1215,7 +1297,9 @@ export function ChatMessages() {
                                 <div className="flex items-center gap-2 text-gray-900 mb-2">
                                   <Check className="size-4 text-green-600" />
                                   <span className="font-medium">
-                                    {eventData?.summary || inputData?.summary || 'Calendar event created'}
+                                    {eventData?.summary ||
+                                      inputData?.summary ||
+                                      'Calendar event created'}
                                   </span>
                                 </div>
                                 {inputData && (
@@ -1226,7 +1310,10 @@ export function ChatMessages() {
                                         <div>
                                           <div className="font-medium">Start:</div>
                                           <div className="text-muted-foreground">
-                                            {formatDateTime(inputData.start.dateTime, inputData.start.timeZone)}
+                                            {formatDateTime(
+                                              inputData.start.dateTime,
+                                              inputData.start.timeZone,
+                                            )}
                                           </div>
                                         </div>
                                       </div>
@@ -1237,14 +1324,18 @@ export function ChatMessages() {
                                         <div>
                                           <div className="font-medium">End:</div>
                                           <div className="text-muted-foreground">
-                                            {formatDateTime(inputData.end.dateTime, inputData.end.timeZone)}
+                                            {formatDateTime(
+                                              inputData.end.dateTime,
+                                              inputData.end.timeZone,
+                                            )}
                                           </div>
                                         </div>
                                       </div>
                                     )}
                                     {inputData.location && (
                                       <div>
-                                        <span className="font-medium">Location:</span> {inputData.location}
+                                        <span className="font-medium">Location:</span>{' '}
+                                        {inputData.location}
                                       </div>
                                     )}
                                     {inputData.attendees && inputData.attendees.length > 0 && (
@@ -1317,11 +1408,16 @@ export function ChatMessages() {
                               <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
                                 <div className="flex items-center gap-2 text-gray-900 mb-2">
                                   <Calendar className="size-4 text-blue-600" />
-                                  <span className="font-medium">{events.length} event{events.length !== 1 ? 's' : ''} found</span>
+                                  <span className="font-medium">
+                                    {events.length} event{events.length !== 1 ? 's' : ''} found
+                                  </span>
                                 </div>
                                 <div className="ml-6 space-y-2 max-h-64 overflow-y-auto">
                                   {events.map((event: any, idx: number) => (
-                                    <div key={idx} className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0">
+                                    <div
+                                      key={idx}
+                                      className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0"
+                                    >
                                       {event.summary && (
                                         <div className="font-medium mb-1">{event.summary}</div>
                                       )}
@@ -1331,7 +1427,9 @@ export function ChatMessages() {
                                         </div>
                                       )}
                                       {event.location && (
-                                        <div className="text-muted-foreground">📍 {event.location}</div>
+                                        <div className="text-muted-foreground">
+                                          📍 {event.location}
+                                        </div>
                                       )}
                                     </div>
                                   ))}
@@ -1374,7 +1472,12 @@ export function ChatMessages() {
                                 : null;
                             const inputData =
                               typeof input === 'object' && input !== null
-                                ? (input as { title?: string; description?: string; dueDate?: string; category?: string })
+                                ? (input as {
+                                    title?: string;
+                                    description?: string;
+                                    dueDate?: string;
+                                    category?: string;
+                                  })
                                 : null;
 
                             return (
@@ -1392,7 +1495,8 @@ export function ChatMessages() {
                                   <div className="ml-6 space-y-1 text-xs text-gray-900">
                                     {inputData.description && (
                                       <div>
-                                        <span className="font-medium">Description:</span> {inputData.description}
+                                        <span className="font-medium">Description:</span>{' '}
+                                        {inputData.description}
                                       </div>
                                     )}
                                     {inputData.dueDate && (
@@ -1403,7 +1507,8 @@ export function ChatMessages() {
                                     )}
                                     {inputData.category && (
                                       <div>
-                                        <span className="font-medium">Category:</span> {inputData.category}
+                                        <span className="font-medium">Category:</span>{' '}
+                                        {inputData.category}
                                       </div>
                                     )}
                                   </div>
@@ -1586,10 +1691,14 @@ export function ChatMessages() {
                                 </div>
                                 <div className="ml-6 space-y-1 text-xs text-gray-900">
                                   {memoryData.title && (
-                                    <div className="font-medium text-sm mb-1">{memoryData.title}</div>
+                                    <div className="font-medium text-sm mb-1">
+                                      {memoryData.title}
+                                    </div>
                                   )}
                                   {memoryData.content && (
-                                    <div className="text-muted-foreground">{memoryData.content}</div>
+                                    <div className="text-muted-foreground">
+                                      {memoryData.content}
+                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -1692,15 +1801,39 @@ export function ChatMessages() {
             className="w-full text-gray-900 placeholder:text-gray-500 rounded-md outline-none resize-none text-base leading-relaxed px-3 py-3 bg-transparent"
             rows={3}
           />
-          <div className="absolute bottom-2 right-2 bg-gray-500 rounded-xl">
-            <Button
-              type="submit"
-              disabled={!input.trim()}
-              className="text-primary-foreground rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary/90"
-              size="icon"
+          <div className="flex items-center justify-between w-full">
+            {/* Model Selector */}
+            <Select
+              value={selectedModel}
+              onValueChange={(value: ModelType) => setSelectedModel(value)}
             >
-              <ArrowUp className="size-4" />
-            </Button>
+              <SelectTrigger className="h-8 w-auto gap-1.5 border-none shadow-none bg-gray-100 hover:bg-gray-200 text-xs text-gray-700">
+                <Sparkles className="size-3.5 text-gray-500" />
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent>
+                {MODEL_OPTIONS.map((model) => (
+                  <SelectItem key={model.value} value={model.value}>
+                    <div className="flex items-center gap-2">
+                      <span>{model.label}</span>
+                      <span className="text-xs text-muted-foreground">({model.provider})</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Submit Button */}
+            <div className="bg-gray-500 rounded-xl">
+              <Button
+                type="submit"
+                disabled={!input.trim()}
+                className="text-primary-foreground rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary/90"
+                size="icon"
+              >
+                <ArrowUp className="size-4" />
+              </Button>
+            </div>
           </div>
         </form>
       </div>

@@ -8,7 +8,7 @@ import path from 'path';
 import { TaskType } from '@google/generative-ai';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { google } from '@ai-sdk/google';
+import { getDefaultChatModel } from './providers/ai-provider';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -253,7 +253,7 @@ export async function registerWorkers() {
           `;
         try {
           const { object } = await generateObject({
-            model: google('gemini-2.5-flash'),
+            model: getDefaultChatModel(),
             schema: z.object({
               title: z.string(),
               summary: z.string(),

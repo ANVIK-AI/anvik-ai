@@ -1,13 +1,18 @@
 import type { Request, Response } from 'express';
 import { streamText, tool } from 'ai';
-import { google } from '@ai-sdk/google';
+import { getChatModel, getDefaultChatModel, getProChatModel } from '../providers/ai-provider';
 import prisma from '../db/prismaClient';
 import { z } from 'zod';
 import { MemoryService } from '../services/chat.service';
 import { convertToModelMessages } from 'ai';
-import { getEmails, sendEmail, getEmailDetails } from "../agents/email.agent"
-import { getCalendarEvents, setCalendarEvent, setBirthdayEvent,  listCalendarTasks, setCalendarTask } from "../agents/calendar.agent"
-
+import { getEmails, sendEmail, getEmailDetails } from '../agents/email.agent';
+import {
+  getCalendarEvents,
+  setCalendarEvent,
+  setBirthdayEvent,
+  listCalendarTasks,
+  setCalendarTask,
+} from '../agents/calendar.agent';
 
 const chatRequestSchema = z.object({
   messages: z.array(z.any()),
@@ -25,13 +30,13 @@ const memoryService = new MemoryService();
 
 export async function chatRequest(req: Request, res: Response) {
   try {
-    console.log("Chat request Triggered \n\nREQ BODY:", req.body);
+    console.log('Chat request Triggered \n\nREQ BODY:', req.body);
     // console.log("REQ HEADERS:", req.headers);
 
     const { messages, metadata } = chatRequestSchema.parse(req.body);
     const { projectId } = metadata;
     const userId = req.user.id;
-    console.log(metadata)
+    console.log(metadata);
     // Verify the project/space exists
     const space = await prisma.space.findUnique({
       where: { id: projectId },
@@ -106,10 +111,10 @@ export async function chatRequest(req: Request, res: Response) {
 
       get_calendar_events: tool({
         name: 'getCalendarEvents',
-        description: "Get a list of Google Calendar events for a specific date range.",
+        description: 'Get a list of Google Calendar events for a specific date range.',
         inputSchema: z.object({
-          minTime: z.string().describe("The start date/time (ISO 8601 or YYYY-MM-DD)."),
-          maxTime: z.string().describe("The end date/time (ISO 8601 or YYYY-MM-DD)."),
+          minTime: z.string().describe('The start date/time (ISO 8601 or YYYY-MM-DD).'),
+          maxTime: z.string().describe('The end date/time (ISO 8601 or YYYY-MM-DD).'),
         }),
         execute: async (args) => {
           return await getCalendarEvents(args, userId);
@@ -118,21 +123,21 @@ export async function chatRequest(req: Request, res: Response) {
 
       set_calendar_event: tool({
         name: 'setCalendarEvent',
-        description: "Set a calendar event. All times must include a timezone.",
+        description: 'Set a calendar event. All times must include a timezone.',
         inputSchema: z.object({
-          summary: z.string().describe("The title or summary of the event."),
+          summary: z.string().describe('The title or summary of the event.'),
           start: z.object({
             dateTime: z.string().describe("ISO 8601 format, e.g., '2025-11-20T09:00:00-07:00'"),
-            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'")
+            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'"),
           }),
           end: z.object({
-            dateTime: z.string().describe("ISO 8601 format"),
-            timeZone: z.string().describe("The timezone")
+            dateTime: z.string().describe('ISO 8601 format'),
+            timeZone: z.string().describe('The timezone'),
           }),
-          location: z.string().optional().describe("Location of the event"),
-          description: z.string().optional().describe("Detailed description"),
-          attendees: z.array(z.string().email()).optional().describe("List of attendee emails"),
-          recurrence: z.array(z.string()).optional().describe("Recurrence rules like RRULE"),
+          location: z.string().optional().describe('Location of the event'),
+          description: z.string().optional().describe('Detailed description'),
+          attendees: z.array(z.string().email()).optional().describe('List of attendee emails'),
+          recurrence: z.array(z.string()).optional().describe('Recurrence rules like RRULE'),
         }),
         execute: async (args) => {
           return await setCalendarEvent(args, userId);
@@ -142,13 +147,19 @@ export async function chatRequest(req: Request, res: Response) {
       // --- ✅ Tasks Tools ---
       set_calendar_task: tool({
         name: 'setCalendarTask',
-        description: "Creates a new task in Google Tasks.",
+        description: 'Creates a new task in Google Tasks.',
         inputSchema: z.object({
-          title: z.string().describe("The main title of the task."),
-          description: z.string().optional().describe("Additional notes."),
-          dueDate: z.string().optional().describe("ISO 8601 format (e.g., '2025-11-20T09:00:00Z')."),
-          category: z.string().optional().describe("The task list name (e.g., 'Work', 'My Tasks')."),
-          isCompleted: z.boolean().optional().describe("Set to true if task is already done."),
+          title: z.string().describe('The main title of the task.'),
+          description: z.string().optional().describe('Additional notes.'),
+          dueDate: z
+            .string()
+            .optional()
+            .describe("ISO 8601 format (e.g., '2025-11-20T09:00:00Z')."),
+          category: z
+            .string()
+            .optional()
+            .describe("The task list name (e.g., 'Work', 'My Tasks')."),
+          isCompleted: z.boolean().optional().describe('Set to true if task is already done.'),
         }),
         execute: async (args) => {
           return await setCalendarTask(args, userId);
@@ -157,13 +168,19 @@ export async function chatRequest(req: Request, res: Response) {
 
       list_calendar_tasks: tool({
         name: 'listCalendarTasks',
-        description: "List and filter tasks from Google Tasks.",
+        description: 'List and filter tasks from Google Tasks.',
         inputSchema: z.object({
-          category: z.string().optional().describe("The specific task list to view (e.g., 'Work')."),
-          groupBy: z.enum(['category', 'status', 'none']).optional().describe("How to organize results."),
+          category: z
+            .string()
+            .optional()
+            .describe("The specific task list to view (e.g., 'Work')."),
+          groupBy: z
+            .enum(['category', 'status', 'none'])
+            .optional()
+            .describe('How to organize results.'),
           showCompleted: z.boolean().optional().default(true),
-          dueMin: z.string().optional().describe("Filter tasks due AFTER this date."),
-          dueMax: z.string().optional().describe("Filter tasks due BEFORE this date."),
+          dueMin: z.string().optional().describe('Filter tasks due AFTER this date.'),
+          dueMax: z.string().optional().describe('Filter tasks due BEFORE this date.'),
         }),
         execute: async (args) => {
           return await listCalendarTasks(args, userId);
@@ -173,11 +190,17 @@ export async function chatRequest(req: Request, res: Response) {
       // --- 📧 Email Tools ---
       get_emails: tool({
         name: 'getEmails',
-        description: "List emails with metadata (Subject, Sender, Date). Optimized for lists.",
+        description: 'List emails with metadata (Subject, Sender, Date). Optimized for lists.',
         inputSchema: z.object({
-          filter: z.string().optional().describe("Specific Gmail search query like 'from:boss@gmail.com'."),
-          category: z.enum(["INBOX", "SENT", "DRAFT", "STARRED", "ARCHIVED", "SPAM", "ALL"]).optional().describe("Folder to search in."),
-          limit: z.number().optional().describe("Max number of emails to return."),
+          filter: z
+            .string()
+            .optional()
+            .describe("Specific Gmail search query like 'from:boss@gmail.com'."),
+          category: z
+            .enum(['INBOX', 'SENT', 'DRAFT', 'STARRED', 'ARCHIVED', 'SPAM', 'ALL'])
+            .optional()
+            .describe('Folder to search in.'),
+          limit: z.number().optional().describe('Max number of emails to return.'),
         }),
         execute: async (args) => {
           return await getEmails(args, userId);
@@ -186,9 +209,9 @@ export async function chatRequest(req: Request, res: Response) {
 
       get_email_details: tool({
         name: 'getEmailDetails',
-        description: "Get the full body content of a specific email using its ID.",
+        description: 'Get the full body content of a specific email using its ID.',
         inputSchema: z.object({
-          messageId: z.string().describe("The unique ID of the email to fetch."),
+          messageId: z.string().describe('The unique ID of the email to fetch.'),
         }),
         execute: async (args) => {
           return await getEmailDetails(args, userId);
@@ -197,11 +220,11 @@ export async function chatRequest(req: Request, res: Response) {
 
       send_email: tool({
         name: 'sendEmail',
-        description: "Send a new email to a recipient.",
+        description: 'Send a new email to a recipient.',
         inputSchema: z.object({
           to: z.string().email().describe("Recipient's email address."),
-          subject: z.string().describe("Email subject line."),
-          body: z.string().describe("Content of the email (HTML or Text)."),
+          subject: z.string().describe('Email subject line.'),
+          body: z.string().describe('Content of the email (HTML or Text).'),
         }),
         execute: async (args) => {
           return await sendEmail(args, userId);
@@ -240,7 +263,7 @@ export async function chatRequest(req: Request, res: Response) {
       let result;
       try {
         result = await streamText({
-          model: google('gemini-2.5-pro'),
+          model: metadata.model ? getChatModel(metadata.model) : getProChatModel(),
           messages: conversationMessages,
           tools: tools,
           system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
@@ -274,20 +297,23 @@ export async function chatRequest(req: Request, res: Response) {
       } catch (streamError) {
         console.error(`[Iteration ${iterationCount}] Error calling streamText:`, streamError);
         const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown error';
-        const isNetworkError = errorMessage.includes('ENOTFOUND') || 
-                               errorMessage.includes('ECONNREFUSED') || 
-                               errorMessage.includes('timeout') ||
-                               errorMessage.includes('Cannot connect to API');
-        
+        const isNetworkError =
+          errorMessage.includes('ENOTFOUND') ||
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('Cannot connect to API');
+
         // Write error message to stream if headers are sent
         if (res.headersSent) {
-          res.write(`\n\n[Error] Unable to connect to AI service. Please check your internet connection and try again.`);
+          res.write(
+            `\n\n[Error] Unable to connect to AI service. Please check your internet connection and try again.`,
+          );
           res.end();
           return;
         } else {
           return res.status(500).json({
             error: 'AI service error',
-            message: isNetworkError 
+            message: isNetworkError
               ? 'Unable to connect to AI service. Please check your internet connection and try again.'
               : errorMessage,
           });
@@ -316,14 +342,21 @@ export async function chatRequest(req: Request, res: Response) {
           }
         }
       } catch (streamLoopError) {
-        console.error(`[Iteration ${iterationCount}] Error during streaming loop:`, streamLoopError);
-        const errorMessage = streamLoopError instanceof Error ? streamLoopError.message : 'Unknown error';
-        const isNetworkError = errorMessage.includes('ENOTFOUND') || 
-                               errorMessage.includes('ECONNREFUSED') || 
-                               errorMessage.includes('timeout') ||
-                               errorMessage.includes('Cannot connect to API');
+        console.error(
+          `[Iteration ${iterationCount}] Error during streaming loop:`,
+          streamLoopError,
+        );
+        const errorMessage =
+          streamLoopError instanceof Error ? streamLoopError.message : 'Unknown error';
+        const isNetworkError =
+          errorMessage.includes('ENOTFOUND') ||
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('Cannot connect to API');
         if (!res.writableEnded) {
-          res.write(`\n\n[Error] ${isNetworkError ? 'Unable to connect to AI service. Please check your internet connection and try again.' : errorMessage}`);
+          res.write(
+            `\n\n[Error] ${isNetworkError ? 'Unable to connect to AI service. Please check your internet connection and try again.' : errorMessage}`,
+          );
           res.end();
         }
         continueLoop = false;
@@ -405,9 +438,8 @@ export async function chatRequestWithID(req: Request, res: Response) {
     // console.log("chat Req qith id triggered!!\n");
     // console.log(metadata);
     // console.log(req.user)
-    const userId=req.user.id;
+    const userId = req.user.id;
     // console.log(userId);
-
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
@@ -545,10 +577,10 @@ export async function chatRequestWithID(req: Request, res: Response) {
       }),
       get_calendar_events: tool({
         name: 'getCalendarEvents',
-        description: "Get a list of Google Calendar events for a specific date range.",
+        description: 'Get a list of Google Calendar events for a specific date range.',
         inputSchema: z.object({
-          minTime: z.string().describe("The start date/time (ISO 8601 or YYYY-MM-DD)."),
-          maxTime: z.string().describe("The end date/time (ISO 8601 or YYYY-MM-DD)."),
+          minTime: z.string().describe('The start date/time (ISO 8601 or YYYY-MM-DD).'),
+          maxTime: z.string().describe('The end date/time (ISO 8601 or YYYY-MM-DD).'),
         }),
         execute: async (args) => {
           return await getCalendarEvents(args, userId);
@@ -557,21 +589,21 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
       set_calendar_event: tool({
         name: 'setCalendarEvent',
-        description: "Set a calendar event. All times must include a timezone.",
+        description: 'Set a calendar event. All times must include a timezone.',
         inputSchema: z.object({
-          summary: z.string().describe("The title or summary of the event."),
+          summary: z.string().describe('The title or summary of the event.'),
           start: z.object({
             dateTime: z.string().describe("ISO 8601 format, e.g., '2025-11-20T09:00:00-07:00'"),
-            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'")
+            timeZone: z.string().describe("The timezone, e.g., 'America/Los_Angeles'"),
           }),
           end: z.object({
-            dateTime: z.string().describe("ISO 8601 format"),
-            timeZone: z.string().describe("The timezone")
+            dateTime: z.string().describe('ISO 8601 format'),
+            timeZone: z.string().describe('The timezone'),
           }),
-          location: z.string().optional().describe("Location of the event"),
-          description: z.string().optional().describe("Detailed description"),
-          attendees: z.array(z.string().email()).optional().describe("List of attendee emails"),
-          recurrence: z.array(z.string()).optional().describe("Recurrence rules like RRULE"),
+          location: z.string().optional().describe('Location of the event'),
+          description: z.string().optional().describe('Detailed description'),
+          attendees: z.array(z.string().email()).optional().describe('List of attendee emails'),
+          recurrence: z.array(z.string()).optional().describe('Recurrence rules like RRULE'),
         }),
         execute: async (args) => {
           return await setCalendarEvent(args, userId);
@@ -581,13 +613,19 @@ export async function chatRequestWithID(req: Request, res: Response) {
       // --- ✅ Tasks Tools ---
       set_calendar_task: tool({
         name: 'setCalendarTask',
-        description: "Creates a new task in Google Tasks.",
+        description: 'Creates a new task in Google Tasks.',
         inputSchema: z.object({
-          title: z.string().describe("The main title of the task."),
-          description: z.string().optional().describe("Additional notes."),
-          dueDate: z.string().optional().describe("ISO 8601 format (e.g., '2025-11-20T09:00:00Z')."),
-          category: z.string().optional().describe("The task list name (e.g., 'Work', 'My Tasks')."),
-          isCompleted: z.boolean().optional().describe("Set to true if task is already done."),
+          title: z.string().describe('The main title of the task.'),
+          description: z.string().optional().describe('Additional notes.'),
+          dueDate: z
+            .string()
+            .optional()
+            .describe("ISO 8601 format (e.g., '2025-11-20T09:00:00Z')."),
+          category: z
+            .string()
+            .optional()
+            .describe("The task list name (e.g., 'Work', 'My Tasks')."),
+          isCompleted: z.boolean().optional().describe('Set to true if task is already done.'),
         }),
         execute: async (args) => {
           return await setCalendarTask(args, userId);
@@ -596,13 +634,19 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
       list_calendar_tasks: tool({
         name: 'listCalendarTasks',
-        description: "List and filter tasks from Google Tasks.",
+        description: 'List and filter tasks from Google Tasks.',
         inputSchema: z.object({
-          category: z.string().optional().describe("The specific task list to view (e.g., 'Work')."),
-          groupBy: z.enum(['category', 'status', 'none']).optional().describe("How to organize results."),
+          category: z
+            .string()
+            .optional()
+            .describe("The specific task list to view (e.g., 'Work')."),
+          groupBy: z
+            .enum(['category', 'status', 'none'])
+            .optional()
+            .describe('How to organize results.'),
           showCompleted: z.boolean().optional().default(true),
-          dueMin: z.string().optional().describe("Filter tasks due AFTER this date."),
-          dueMax: z.string().optional().describe("Filter tasks due BEFORE this date."),
+          dueMin: z.string().optional().describe('Filter tasks due AFTER this date.'),
+          dueMax: z.string().optional().describe('Filter tasks due BEFORE this date.'),
         }),
         execute: async (args) => {
           return await listCalendarTasks(args, userId);
@@ -612,11 +656,17 @@ export async function chatRequestWithID(req: Request, res: Response) {
       // --- 📧 Email Tools ---
       get_emails: tool({
         name: 'getEmails',
-        description: "List emails with metadata (Subject, Sender, Date). Optimized for lists.",
+        description: 'List emails with metadata (Subject, Sender, Date). Optimized for lists.',
         inputSchema: z.object({
-          filter: z.string().optional().describe("Specific Gmail search query like 'from:boss@gmail.com'."),
-          category: z.enum(["INBOX", "SENT", "DRAFT", "STARRED", "ARCHIVED", "SPAM", "ALL"]).optional().describe("Folder to search in."),
-          limit: z.number().optional().describe("Max number of emails to return."),
+          filter: z
+            .string()
+            .optional()
+            .describe("Specific Gmail search query like 'from:boss@gmail.com'."),
+          category: z
+            .enum(['INBOX', 'SENT', 'DRAFT', 'STARRED', 'ARCHIVED', 'SPAM', 'ALL'])
+            .optional()
+            .describe('Folder to search in.'),
+          limit: z.number().optional().describe('Max number of emails to return.'),
         }),
         execute: async (args) => {
           return await getEmails(args, userId);
@@ -625,9 +675,9 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
       get_email_details: tool({
         name: 'getEmailDetails',
-        description: "Get the full body content of a specific email using its ID.",
+        description: 'Get the full body content of a specific email using its ID.',
         inputSchema: z.object({
-          messageId: z.string().describe("The unique ID of the email to fetch."),
+          messageId: z.string().describe('The unique ID of the email to fetch.'),
         }),
         execute: async (args) => {
           return await getEmailDetails(args, userId);
@@ -636,11 +686,11 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
       send_email: tool({
         name: 'sendEmail',
-        description: "Send a new email to a recipient.",
+        description: 'Send a new email to a recipient.',
         inputSchema: z.object({
           to: z.string().email().describe("Recipient's email address."),
-          subject: z.string().describe("Email subject line."),
-          body: z.string().describe("Content of the email (HTML or Text)."),
+          subject: z.string().describe('Email subject line.'),
+          body: z.string().describe('Content of the email (HTML or Text).'),
         }),
         execute: async (args) => {
           return await sendEmail(args, userId);
@@ -656,13 +706,13 @@ export async function chatRequestWithID(req: Request, res: Response) {
     // const modelMessages = convertUIToModelMessages(messages);
     // console.log("Converted messages:", JSON.stringify(modelMessages, null, 2));
 
-    const convertToModel = convertToModelMessages(messages);
+    const convertToModel = await convertToModelMessages(messages);
     // console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
-    
+
     let result;
     try {
       result = await streamText({
-        model: google('gemini-2.5-flash'),
+        model: metadata.model ? getChatModel(metadata.model) : getDefaultChatModel(),
         messages: convertToModel,
         tools: tools,
         maxSteps: 5,
@@ -697,15 +747,16 @@ export async function chatRequestWithID(req: Request, res: Response) {
     } catch (streamError) {
       console.error('Error calling streamText:', streamError);
       const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown error';
-      const isNetworkError = errorMessage.includes('ENOTFOUND') || 
-                             errorMessage.includes('ECONNREFUSED') || 
-                             errorMessage.includes('timeout') ||
-                             errorMessage.includes('Cannot connect to API');
-      
+      const isNetworkError =
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('Cannot connect to API');
+
       if (!res.headersSent) {
         return res.status(500).json({
           error: 'AI service error',
-          message: isNetworkError 
+          message: isNetworkError
             ? 'Unable to connect to AI service. Please check your internet connection and try again.'
             : errorMessage,
         });
@@ -749,14 +800,15 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
     if (!res.headersSent) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const isNetworkError = errorMessage.includes('ENOTFOUND') || 
-                             errorMessage.includes('ECONNREFUSED') || 
-                             errorMessage.includes('timeout') ||
-                             errorMessage.includes('Cannot connect to API');
-      
+      const isNetworkError =
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('Cannot connect to API');
+
       return res.status(500).json({
         error: 'Internal server error',
-        message: isNetworkError 
+        message: isNetworkError
           ? 'Unable to connect to AI service. Please check your internet connection and try again.'
           : errorMessage,
       });
@@ -776,7 +828,7 @@ export async function chatTitleRequest(req: Request, res: Response) {
     console.log(`[Title Generation] Generating title for: "${prompt.substring(0, 100)}..."`);
 
     const result = streamText({
-      model: google('gemini-2.5-flash'),
+      model: getDefaultChatModel(),
       system: `Generate a very short title (2-5 words) that summarizes the following conversation starter. 
         Return only the title, no other text. Make it concise and descriptive.`,
       messages: [
