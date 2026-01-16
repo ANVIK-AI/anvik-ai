@@ -36,16 +36,18 @@ export default function Layout({ setShowTestPage }: any) {
   }, []);
 
   return (
-    <div className="relative bg-[#c1c2c1] flex-1 flex flex-col min-h-screen">
-      <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-white/10">
-        <Header
-          onAddMemory={() => {
-            // setShowAddMemoryView(true);
-            setShowTestPage(true);
-            navigate("/test");
-          }}
-        />
-      </div>
+    <div className="relative bg-background text-foreground flex-1 flex flex-col min-h-screen font-sans selection:bg-primary/30">
+      {/* Decorative background elements can replace ThreeBackground if needed, or keep it. */}
+      {/* <div className="fixed inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))] opacity-20 pointer-events-none" /> */}
+
+      {/* Header handled by sticky positioning in Header component or here */}
+      <Header
+        onAddMemory={() => {
+          // setShowAddMemoryView(true);
+          setShowTestPage(true);
+          navigate("/test");
+        }}
+      />
 
       {showAddMemoryView && (
         <AddMemoryView

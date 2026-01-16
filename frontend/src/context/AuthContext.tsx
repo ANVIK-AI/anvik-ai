@@ -7,6 +7,8 @@ interface User {
   id: string;
   email?: string;
   name?: string;
+  displayName?: string;
+  photo?: string;
   spaceIds?: string[];
 }
 
@@ -37,14 +39,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const response = await axios.get(import.meta.env.VITE_PUBLIC_BACKEND_URL + '/user/profile', {
           withCredentials: true,
         })
-        console.log("response11 : "+response.data);
+        console.log("response11 : " + response.data);
         console.table(response.data);
-        if(response.status===200){
+        if (response.status === 200) {
           setUser(response.data);
-        }else if(response.status===401){
+        } else if (response.status === 401) {
           console.log("user not found");
           setUser(null);
-        }else{
+        } else {
           console.log("user not found");
           setUser(null);
         }

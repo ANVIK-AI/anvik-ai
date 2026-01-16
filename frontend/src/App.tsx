@@ -1,5 +1,5 @@
 import './App.css';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { DocumentRoutesTester } from './pages/document-routes-tester';
 import { ChatTester } from './pages/chatTester';
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom';
@@ -13,7 +13,6 @@ import { authAPI } from './services/api';
 import PortfolioHome from './pages/PortfolioHome';
 import ThreeBackground from './ui/components/ThreeBackground';
 import Signup from './pages/Signup';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { fas } from '@fortawesome/free-solid-svg-icons'
 import { far } from '@fortawesome/free-regular-svg-icons'
@@ -63,45 +62,45 @@ function App() {
     <div className="app-shell h-screen flex flex-col">
       <AuthProvider>
 
-      <BrowserRouter>
-        <Routes>
-          <Route path='/' element={<Home/>}/>
-          <Route path="/profile" element={<PortfolioHome />} />
-          <Route
-            path="/login"
-            element={
-              <div className="app-content">
-                <ThreeBackground />
-                <Login setIsAuthenticated={setIsAuthenticated} isAuthenticated={isAuthenticated} />
-              </div>
-            }
-          />
-          <Route
-            path="/signup"
-            element={
-              <div className="app-content">
-                <ThreeBackground />
-                <Signup setIsAuthenticated={setIsAuthenticated} />
-              </div>
-            }
-          />
-          <Route element={<Layout setShowTestPage={setShowTestPage} />}>
-            <Route path="/chat" element={<Chat />} />
+        <BrowserRouter>
+          <Routes>
+            <Route path='/' element={<Home />} />
+            <Route path="/profile" element={<PortfolioHome />} />
             <Route
-              path="/test"
+              path="/login"
               element={
-                <TestPage
-                  showTestPage={showTestPage}
-                  setShowTestPage={setShowTestPage}
-                  showChatPage={showChatPage}
-                  setShowChatPage={setShowChatPage}
-                />
+                <div className="app-content">
+                  <ThreeBackground />
+                  <Login setIsAuthenticated={setIsAuthenticated} isAuthenticated={isAuthenticated} />
+                </div>
               }
             />
-            <Route path="/chat/:id" element={<ChatMessages />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+            <Route
+              path="/signup"
+              element={
+                <div className="app-content">
+                  <ThreeBackground />
+                  <Signup setIsAuthenticated={setIsAuthenticated} />
+                </div>
+              }
+            />
+            <Route element={<Layout setShowTestPage={setShowTestPage} />}>
+              <Route path="/chat" element={<Chat />} />
+              <Route
+                path="/test"
+                element={
+                  <TestPage
+                    showTestPage={showTestPage}
+                    setShowTestPage={setShowTestPage}
+                    showChatPage={showChatPage}
+                    setShowChatPage={setShowChatPage}
+                  />
+                }
+              />
+              <Route path="/chat/:id" element={<ChatMessages />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
       </AuthProvider>
 
     </div>

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { useCustomer } from "autumn-js/react"
 import { toast } from "sonner"
 import type { z } from "zod"
 import type { DocumentsWithMemoriesResponseSchema } from "../validation/api"
@@ -9,7 +8,7 @@ type DocumentsResponse = z.infer<typeof DocumentsWithMemoriesResponseSchema>
 type DocumentWithMemories = DocumentsResponse["documents"][0]
 
 export const fetchSubscriptionStatus = (
-	autumn: ReturnType<typeof useCustomer>,
+	autumn: any,
 	isEnabled: boolean,
 ) =>
 	useQuery({
@@ -42,7 +41,7 @@ export const fetchSubscriptionStatus = (
 	})
 
 // Feature checks
-export const fetchMemoriesFeature = (autumn: ReturnType<typeof useCustomer>, isEnabled: boolean) =>
+export const fetchMemoriesFeature = (autumn: any, isEnabled: boolean) =>
 	useQuery({
 		queryFn: async () => {
 			const res = autumn.check({ featureId: "memories" })
@@ -55,7 +54,7 @@ export const fetchMemoriesFeature = (autumn: ReturnType<typeof useCustomer>, isE
 	})
 
 export const fetchConnectionsFeature = (
-	autumn: ReturnType<typeof useCustomer>,
+	autumn: any,
 	isEnabled: boolean,
 ) =>
 	useQuery({
@@ -71,7 +70,7 @@ export const fetchConnectionsFeature = (
 
 // Product checks
 export const fetchConsumerProProduct = (
-	autumn: ReturnType<typeof useCustomer>,
+	autumn: any,
 ) =>
 	useQuery({
 		queryFn: async () => {
@@ -83,7 +82,7 @@ export const fetchConsumerProProduct = (
 		gcTime: 5 * 60 * 1000, // 5 minutes
 	})
 
-export const fetchProProduct = (autumn: ReturnType<typeof useCustomer>) =>
+export const fetchProProduct = (autumn: any) =>
 	useQuery({
 		queryFn: async () => {
 			const res = autumn.check({ productId: "pro" })
