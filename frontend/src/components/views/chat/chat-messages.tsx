@@ -9,19 +9,7 @@ import {
   SelectValue,
 } from '@ui/components/select';
 import { DefaultChatTransport } from 'ai';
-import {
-  ArrowUp,
-  Calendar,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Copy,
-  Mail,
-  RotateCcw,
-  X,
-  Sparkles,
-} from 'lucide-react';
+import { ArrowUp, Copy, RotateCcw, Sparkles, MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -34,319 +22,22 @@ import { Spinner } from '../../spinner';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/context/AuthContext';
 
-interface MemoryResult {
-  documentId?: string;
-  title?: string;
-  content?: string;
-  url?: string;
-  score?: number;
-}
+// Import tool card components
+import {
+  GetEmailsCard,
+  GetEmailDetailsCard,
+  SendEmailCard,
+  GetCalendarEventsCard,
+  SetCalendarEventCard,
+  ListCalendarTasksCard,
+  SetCalendarTaskCard,
+  SearchMemoriesCard,
+  AddMemoryCard,
+  FetchMemoryCard,
+  type ToolState,
+} from './tool-cards';
 
-interface ExpandableMemoriesProps {
-  foundCount: number;
-  results: MemoryResult[];
-}
-
-function ExpandableMemories({ foundCount, results }: ExpandableMemoriesProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  if (foundCount === 0) {
-    return (
-      <div className="text-sm flex items-center gap-2 text-muted-foreground">
-        <Check className="size-4" /> No memories found
-      </div>
-    );
-  }
-
-  return (
-    <div className="text-sm">
-      <button
-        className="flex items-center gap-2 text-muted-foreground transition-colors text-gray-900"
-        onClick={() => setIsExpanded(!isExpanded)}
-        type="button"
-      >
-        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        Related memories
-      </button>
-
-      {isExpanded && results.length > 0 && (
-        <div className="mt-2 ml-6 space-y-2 max-h-48 overflow-y-auto grid grid-cols-3 gap-2">
-          {results.map((result, index) => {
-            const isClickable =
-              result.url && (result.url.startsWith('http://') || result.url.startsWith('https://'));
-
-            const content = (
-              <div className="text-gray-900">
-                {result.title && <div className="font-medium text-sm mb-1">{result.title}</div>}
-                {result.content && (
-                  <div className="text-xs text-muted-foreground line-clamp-2">{result.content}</div>
-                )}
-                {result.url && (
-                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-1 truncate">
-                    {result.url}
-                  </div>
-                )}
-                {result.score && (
-                  <div className="text-xs text-muted-slate-200 mt-1">
-                    Score: {(result.score * 100).toFixed(1)}%
-                  </div>
-                )}
-              </div>
-            );
-
-            if (isClickable) {
-              return (
-                <a
-                  className="block p-2 bg-accent/50 rounded-md border border-border hover:bg-accent transition-colors cursor-pointer"
-                  href={result.url}
-                  key={result.documentId || index}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  {content}
-                </a>
-              );
-            }
-
-            return (
-              <div
-                className="p-2 bg-accent/50 rounded-md border border-border bg-white"
-                key={result.documentId || index}
-              >
-                {content}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface EmailResult {
-  id?: string;
-  threadId?: string;
-  subject?: string;
-  from?: string;
-  date?: string;
-  snippet?: string;
-}
-
-interface ExpandableEmailsProps {
-  foundCount: number;
-  results: EmailResult[];
-  category?: string;
-}
-
-function ExpandableEmails({ foundCount, results, category }: ExpandableEmailsProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  // Helper function to decode HTML entities in snippet
-  const decodeHtml = (html: string) => {
-    const txt = document.createElement('textarea');
-    txt.innerHTML = html;
-    return txt.value;
-  };
-
-  // Helper function to format date
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  // Helper function to extract email address from "Name <email@domain.com>" format
-  const extractEmailAddress = (fromStr?: string) => {
-    if (!fromStr) return '';
-    const match = fromStr.match(/<([^>]+)>/);
-    return match ? match[1] : fromStr;
-  };
-
-  if (foundCount === 0) {
-    return (
-      <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
-        <Check className="size-4" /> No emails found{category ? ` in ${category}` : ''}
-      </div>
-    );
-  }
-
-  return (
-    <div className="text-sm">
-      <button
-        className="flex items-center gap-2 text-muted-foreground transition-colors text-gray-900"
-        onClick={() => setIsExpanded(!isExpanded)}
-        type="button"
-      >
-        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        {foundCount} email{foundCount !== 1 ? 's' : ''} found{category ? ` in ${category}` : ''}
-      </button>
-
-      {isExpanded && results.length > 0 && (
-        <div className="mt-2 ml-6 space-y-2 max-h-96 overflow-y-auto">
-          {results.map((email, index) => (
-            <div
-              className="p-3 bg-accent/50 rounded-md border border-border bg-white hover:bg-accent transition-colors"
-              key={email.id || email.threadId || index}
-            >
-              <div className="text-gray-900">
-                {email.subject && (
-                  <div className="font-medium text-sm mb-1.5 flex items-start gap-2">
-                    <Mail className="size-4 mt-0.5 flex-shrink-0 text-blue-600" />
-                    <span className="flex-1">{email.subject}</span>
-                  </div>
-                )}
-                {email.from && (
-                  <div className="text-xs text-muted-foreground mb-1">
-                    From: <span className="font-medium">{extractEmailAddress(email.from)}</span>
-                  </div>
-                )}
-                {email.date && (
-                  <div className="text-xs text-muted-foreground mb-2">{formatDate(email.date)}</div>
-                )}
-                {email.snippet && (
-                  <div className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
-                    {decodeHtml(email.snippet)}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface EmailDetailsData {
-  id?: string;
-  threadId?: string;
-  subject?: string;
-  from?: string;
-  to?: string;
-  date?: string;
-  snippet?: string;
-  body?: string; // HTML content
-}
-
-interface EmailDetailsProps {
-  email: EmailDetailsData;
-}
-
-function EmailDetails({ email }: EmailDetailsProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-
-  // Helper function to format date
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  // Helper function to extract email address from "Name <email@domain.com>" format
-  const extractEmailAddress = (emailStr?: string) => {
-    if (!emailStr) return '';
-    const match = emailStr.match(/<([^>]+)>/);
-    return match ? match[1] : emailStr;
-  };
-
-  // Helper function to extract name from "Name <email@domain.com>" format
-  const extractName = (emailStr?: string) => {
-    if (!emailStr) return '';
-    const match = emailStr.match(/^(.+?)\s*<(.+)>$/);
-    return match ? match[1].trim().replace(/['"]/g, '') : '';
-  };
-
-  return (
-    <div className="text-sm">
-      <button
-        className="flex items-center gap-2 text-muted-foreground transition-colors text-gray-900"
-        onClick={() => setIsExpanded(!isExpanded)}
-        type="button"
-      >
-        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        Email details
-      </button>
-
-      {isExpanded && (
-        <div className="mt-2 ml-6 bg-accent/50 rounded-md border border-border bg-white p-4">
-          <div className="text-gray-900 space-y-3">
-            {email.subject && (
-              <div className="font-medium text-base mb-2 flex items-start gap-2">
-                <Mail className="size-5 mt-0.5 flex-shrink-0 text-blue-600" />
-                <span className="flex-1">{email.subject}</span>
-              </div>
-            )}
-
-            <div className="space-y-1.5 text-xs border-b border-border pb-3">
-              {email.from && (
-                <div className="flex gap-2">
-                  <span className="text-muted-foreground min-w-[3rem]">From:</span>
-                  <span className="text-gray-900">
-                    {extractName(email.from) && (
-                      <span className="font-medium">{extractName(email.from)} </span>
-                    )}
-                    <span className="text-blue-600">{extractEmailAddress(email.from)}</span>
-                  </span>
-                </div>
-              )}
-              {email.to && (
-                <div className="flex gap-2">
-                  <span className="text-muted-foreground min-w-[3rem]">To:</span>
-                  <span className="text-gray-900">{extractEmailAddress(email.to)}</span>
-                </div>
-              )}
-              {email.date && (
-                <div className="flex gap-2">
-                  <span className="text-muted-foreground min-w-[3rem]">Date:</span>
-                  <span className="text-gray-900">{formatDate(email.date)}</span>
-                </div>
-              )}
-            </div>
-
-            {email.body && (
-              <div className="mt-3">
-                <div
-                  className="email-body prose prose-sm max-w-none text-gray-900"
-                  dangerouslySetInnerHTML={{ __html: email.body }}
-                  style={{
-                    fontFamily: 'system-ui, -apple-system, sans-serif',
-                    fontSize: '14px',
-                    lineHeight: '1.5',
-                  }}
-                />
-              </div>
-            )}
-            {email.snippet && !email.body && (
-              <div className="mt-3 text-xs text-muted-foreground leading-relaxed">
-                {email.snippet}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
+// Custom hook for sticky auto scroll behavior
 function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -427,6 +118,137 @@ function useStickyAutoScroll(triggerKeys: ReadonlyArray<unknown>) {
     enableAutoScroll,
     scrollToBottom,
   } as const;
+}
+
+// Enhanced thinking indicator component
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-start gap-3 p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex-shrink-0">
+        <MessageSquare className="size-4 text-indigo-600 animate-pulse" />
+      </div>
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <TextShimmer className="text-sm font-medium text-gray-700" duration={1.5}>
+            Thinking...
+          </TextShimmer>
+        </div>
+        <div className="flex gap-1 mt-2">
+          <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+          <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+          <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tool part renderer component - maps tool types to their card components
+function ToolPartRenderer({
+  part,
+  messageId,
+  index,
+}: {
+  part: any;
+  messageId: string;
+  index: number;
+}) {
+  const state = part.state as ToolState;
+  const key = `${messageId}-${part.type}-${index}`;
+
+  // Handle different tool types
+  switch (part.type) {
+    // Memory Tools
+    case 'tool-searchMemories':
+    case 'tool-search_memories':
+      return <SearchMemoriesCard key={key} state={state} output={part.output} />;
+
+    case 'tool-addMemory':
+    case 'tool-add_memory':
+      return <AddMemoryCard key={key} state={state} input={part.input} output={part.output} />;
+
+    case 'tool-fetch_memory':
+    case 'tool-fetchMemory':
+      return <FetchMemoryCard key={key} state={state} output={part.output} />;
+
+    // Email Tools
+    case 'tool-get_emails':
+    case 'tool-getEmails':
+      return <GetEmailsCard key={key} state={state} output={part.output} />;
+
+    case 'tool-get_email_details':
+    case 'tool-get-email-details':
+    case 'tool-getEmailDetails':
+      return <GetEmailDetailsCard key={key} state={state} output={part.output} />;
+
+    case 'tool-send_email':
+    case 'tool-sendEmail':
+      return <SendEmailCard key={key} state={state} input={part.input} output={part.output} />;
+
+    // Calendar Tools
+    case 'tool-set_calendar_event':
+    case 'tool-setCalendarEvent':
+      return (
+        <SetCalendarEventCard key={key} state={state} input={part.input} output={part.output} />
+      );
+
+    case 'tool-get_calendar_events':
+    case 'tool-getCalendarEvents':
+      return <GetCalendarEventsCard key={key} state={state} output={part.output} />;
+
+    // Task Tools
+    case 'tool-set_calendar_task':
+    case 'tool-setCalendarTask':
+      return (
+        <SetCalendarTaskCard key={key} state={state} input={part.input} output={part.output} />
+      );
+
+    case 'tool-list_calendar_tasks':
+    case 'tool-listCalendarTasks':
+      return <ListCalendarTasksCard key={key} state={state} output={part.output} />;
+
+    default:
+      // For unknown tools, show a generic loading/success state
+      if (part.type?.startsWith('tool-')) {
+        const toolName = part.type.replace('tool-', '').replace(/_/g, ' ');
+
+        if (state === 'input-available' || state === 'input-streaming') {
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-3 p-3 rounded-lg border border-border bg-gray-50 animate-in fade-in duration-300"
+            >
+              <Spinner className="size-4 text-gray-600" />
+              <span className="text-sm text-gray-700">Processing {toolName}...</span>
+            </div>
+          );
+        }
+
+        if (state === 'output-error') {
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-3 p-3 rounded-lg border border-red-200 bg-red-50 animate-in fade-in duration-300"
+            >
+              <span className="text-sm text-red-700">Error with {toolName}</span>
+            </div>
+          );
+        }
+
+        if (state === 'output-available') {
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-3 p-3 rounded-lg border border-green-200 bg-green-50 animate-in fade-in duration-300"
+            >
+              <span className="text-sm text-green-700">{toolName} completed</span>
+            </div>
+          );
+        }
+      }
+
+      return null;
+  }
 }
 
 export function ChatMessages() {
@@ -519,15 +341,13 @@ export function ChatMessages() {
           credentials: 'include',
           signal: controller.signal,
           headers,
-          // include cookies if backend uses them; harmless otherwise
-          // credentials: (options as any)?.credentials ?? "include",
         }).finally(() => {
           clearTimeout(timeoutId);
         });
       },
     }),
     onFinish: (result) => {
-      console.log('✅ Message finished:', result);
+      console.log('Message finished:', result);
       const activeId = activeChatIdRef.current;
       if (!activeId) return;
       if (result.message.role !== 'assistant') return;
@@ -542,7 +362,7 @@ export function ChatMessages() {
       }
     },
     onError: (error) => {
-      console.error('❌ Chat error:', error);
+      console.error('Chat error:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'An error occurred while chatting';
 
@@ -903,29 +723,29 @@ export function ChatMessages() {
   } = useStickyAutoScroll([messages, status]);
 
   return (
-    <div className="h-screen flex flex-col w-full">
+    <div className="h-screen flex flex-col w-full bg-gradient-to-b from-gray-50 to-white">
+      {/* Chat Messages Area */}
       <div className="flex-1 relative">
         <div
-          className="flex flex-col gap-2 absolute inset-0 overflow-y-auto px-4 pt-4 pb-7 scroll-pb-7 custom-scrollbar"
+          className="flex flex-col gap-4 absolute inset-0 overflow-y-auto px-4 pt-4 pb-7 scroll-pb-7 custom-scrollbar"
           onScroll={onScroll}
           ref={scrollContainerRef}
         >
           {messages.map((message) => (
             <div
               className={cn(
-                'flex my-2',
-                message.role === 'user' ? 'items-center flex-row-reverse gap-2' : 'flex-col',
+                'flex animate-in fade-in slide-in-from-bottom-2 duration-300',
+                message.role === 'user' ? 'justify-end' : 'justify-start',
               )}
               key={message.id}
             >
               <div
                 className={cn(
-                  'flex flex-col gap-2 max-w-[80%] text-slate-200',
-                  message.role === 'user'
-                    ? 'bg-accent/50 px-3 py-1.5 border border-border rounded-lg text-gray-900 bg-white'
-                    : '',
+                  'flex flex-col gap-3 max-w-[85%]',
+                  message.role === 'user' ? 'items-end' : 'items-start',
                 )}
               >
+                {/* Render message parts */}
                 {message.parts
                   .filter((part) => {
                     if (part.type === 'text') return true;
@@ -934,831 +754,86 @@ export function ChatMessages() {
                     return false;
                   })
                   .map((part, index) => {
-                    switch (part.type) {
-                      case 'text':
-                        return (
-                          <div
-                            className="bg-accent/50 p-2 rounded-lg text-gray-900 bg-white"
-                            key={`${message.id}-${part.type}-${index}`}
+                    // Text part
+                    if (part.type === 'text') {
+                      return (
+                        <div
+                          key={`${message.id}-text-${index}`}
+                          className={cn(
+                            'rounded-2xl shadow-sm',
+                            message.role === 'user'
+                              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-4 py-3'
+                              : 'bg-white border border-gray-200 px-4 py-3',
+                          )}
+                        >
+                          <Streamdown
+                            className={cn(message.role === 'user' ? 'text-white' : 'text-gray-900')}
                           >
-                            <Streamdown className="text-gray-900">{part.text}</Streamdown>
-                          </div>
-                        );
-                      case 'tool-searchMemories':
-                      case 'tool-search_memories': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Searching memories...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error recalling memories
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const foundCount =
-                              typeof output === 'object' && output !== null && 'count' in output
-                                ? Number(output.count) || 0
-                                : 0;
-                            // @ts-expect-error
-                            const results = Array.isArray(output?.results)
-                              ? // @ts-expect-error
-                                output.results
-                              : [];
-
-                            return (
-                              <ExpandableMemories
-                                foundCount={foundCount}
-                                key={`${message.id}-${part.type}-${index}`}
-                                results={results}
-                              />
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-addMemory':
-                      case 'tool-add_memory': {
-                        switch (part.state) {
-                          case 'input-available':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Adding memory...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error adding memory
-                              </div>
-                            );
-                          case 'output-available':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Check className="size-4 text-gray-900" /> Memory added
-                              </div>
-                            );
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4 text-gray-900" /> Adding memory...
-                              </div>
-                            );
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-get_emails':
-                      case 'tool-getEmails': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Retrieving emails...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error retrieving emails
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const foundCount =
-                              typeof output === 'object' && output !== null && 'count' in output
-                                ? Number(output.count) || 0
-                                : 0;
-                            const category =
-                              typeof output === 'object' && output !== null && 'category' in output
-                                ? String(output.category)
-                                : undefined;
-                            // @ts-expect-error
-                            const results = Array.isArray(output?.data)
-                              ? // @ts-expect-error
-                                output.data
-                              : [];
-
-                            return (
-                              <ExpandableEmails
-                                category={category}
-                                foundCount={foundCount}
-                                key={`${message.id}-${part.type}-${index}`}
-                                results={results}
-                              />
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-get_email_details':
-                      case 'tool-get-email-details':
-                      case 'tool-getEmailDetails': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Retrieving email details...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error retrieving email details
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const emailData =
-                              typeof output === 'object' && output !== null && 'data' in output
-                                ? (output as { data: EmailDetailsData }).data
-                                : null;
-
-                            if (!emailData) {
-                              return (
-                                <div
-                                  className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                  key={`${message.id}-${part.type}-${index}`}
-                                >
-                                  <X className="size-4" /> No email details available
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <EmailDetails
-                                email={emailData}
-                                key={`${message.id}-${part.type}-${index}`}
-                              />
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-send_email':
-                      case 'tool-sendEmail': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Sending email...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error sending email
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const input = part.input;
-                            const emailData =
-                              typeof output === 'object' && output !== null && 'data' in output
-                                ? (
-                                    output as {
-                                      data: {
-                                        id?: string;
-                                        threadId?: string;
-                                        message?: string;
-                                        labelIds?: string[];
-                                      };
-                                    }
-                                  ).data
-                                : null;
-                            const inputData =
-                              typeof input === 'object' && input !== null
-                                ? (input as { to?: string; subject?: string; body?: string })
-                                : null;
-
-                            if (!emailData || !emailData.message) {
-                              return (
-                                <div
-                                  className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                  key={`${message.id}-${part.type}-${index}`}
-                                >
-                                  <X className="size-4" /> Email send status unknown
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div
-                                className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <div className="flex items-center gap-2 text-gray-900 mb-2">
-                                  <Check className="size-4 text-green-600" />
-                                  <span className="font-medium">{emailData.message}</span>
-                                </div>
-                                {inputData && (
-                                  <div className="ml-6 space-y-1 text-xs text-gray-900">
-                                    {inputData.to && (
-                                      <div>
-                                        <span className="font-medium text-gray-900">To:</span>{' '}
-                                        {inputData.to}
-                                      </div>
-                                    )}
-                                    {inputData.subject && (
-                                      <div>
-                                        <span className="font-medium text-gray-900">Subject:</span>{' '}
-                                        {inputData.subject}
-                                      </div>
-                                    )}
-                                    {emailData.id && (
-                                      <div className="text-xs text-gray-900 mt-1">
-                                        Email ID: {emailData.id}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-set_calendar_event':
-                      case 'tool-setCalendarEvent': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Creating calendar event...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error creating calendar event
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const input = part.input;
-                            const eventData =
-                              typeof output === 'object' && output !== null
-                                ? (output as {
-                                    status?: string;
-                                    summary?: string;
-                                    htmlLink?: string;
-                                  })
-                                : null;
-                            const inputData =
-                              typeof input === 'object' && input !== null
-                                ? (input as {
-                                    summary?: string;
-                                    start?: { dateTime?: string; timeZone?: string };
-                                    end?: { dateTime?: string; timeZone?: string };
-                                    location?: string;
-                                    description?: string;
-                                    attendees?: string[];
-                                  })
-                                : null;
-
-                            const formatDateTime = (dateTime?: string, timeZone?: string) => {
-                              if (!dateTime) return '';
-                              try {
-                                const date = new Date(dateTime);
-                                return date.toLocaleString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                  hour: 'numeric',
-                                  minute: '2-digit',
-                                  timeZone: timeZone || 'UTC',
-                                });
-                              } catch {
-                                return dateTime;
-                              }
-                            };
-
-                            return (
-                              <div
-                                className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <div className="flex items-center gap-2 text-gray-900 mb-2">
-                                  <Check className="size-4 text-green-600" />
-                                  <span className="font-medium">
-                                    {eventData?.summary ||
-                                      inputData?.summary ||
-                                      'Calendar event created'}
-                                  </span>
-                                </div>
-                                {inputData && (
-                                  <div className="ml-6 space-y-1.5 text-xs text-gray-900">
-                                    {inputData.start && (
-                                      <div className="flex items-start gap-2">
-                                        <Clock className="size-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
-                                        <div>
-                                          <div className="font-medium">Start:</div>
-                                          <div className="text-muted-foreground">
-                                            {formatDateTime(
-                                              inputData.start.dateTime,
-                                              inputData.start.timeZone,
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {inputData.end && (
-                                      <div className="flex items-start gap-2">
-                                        <Clock className="size-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
-                                        <div>
-                                          <div className="font-medium">End:</div>
-                                          <div className="text-muted-foreground">
-                                            {formatDateTime(
-                                              inputData.end.dateTime,
-                                              inputData.end.timeZone,
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {inputData.location && (
-                                      <div>
-                                        <span className="font-medium">Location:</span>{' '}
-                                        {inputData.location}
-                                      </div>
-                                    )}
-                                    {inputData.attendees && inputData.attendees.length > 0 && (
-                                      <div>
-                                        <span className="font-medium">Attendees:</span>{' '}
-                                        {inputData.attendees.join(', ')}
-                                      </div>
-                                    )}
-                                    {eventData?.htmlLink && (
-                                      <a
-                                        className="text-blue-600 hover:underline flex items-center gap-1 mt-2"
-                                        href={eventData.htmlLink}
-                                        rel="noopener noreferrer"
-                                        target="_blank"
-                                      >
-                                        <Calendar className="size-3.5" />
-                                        View in Google Calendar
-                                      </a>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-get_calendar_events':
-                      case 'tool-getCalendarEvents': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Fetching calendar events...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error fetching calendar events
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const events =
-                              typeof output === 'object' &&
-                              output !== null &&
-                              'events' in output &&
-                              Array.isArray((output as { events: any[] }).events)
-                                ? (output as { events: any[] }).events
-                                : [];
-
-                            if (events.length === 0) {
-                              return (
-                                <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
-                                  <Check className="size-4" /> No calendar events found
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
-                                <div className="flex items-center gap-2 text-gray-900 mb-2">
-                                  <Calendar className="size-4 text-blue-600" />
-                                  <span className="font-medium">
-                                    {events.length} event{events.length !== 1 ? 's' : ''} found
-                                  </span>
-                                </div>
-                                <div className="ml-6 space-y-2 max-h-64 overflow-y-auto">
-                                  {events.map((event: any, idx: number) => (
-                                    <div
-                                      key={idx}
-                                      className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0"
-                                    >
-                                      {event.summary && (
-                                        <div className="font-medium mb-1">{event.summary}</div>
-                                      )}
-                                      {event.start?.dateTime && (
-                                        <div className="text-muted-foreground">
-                                          {new Date(event.start.dateTime).toLocaleString()}
-                                        </div>
-                                      )}
-                                      {event.location && (
-                                        <div className="text-muted-foreground">
-                                          📍 {event.location}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-set_calendar_task':
-                      case 'tool-setCalendarTask': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Creating task...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error creating task
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const input = part.input;
-                            const taskData =
-                              typeof output === 'object' && output !== null
-                                ? (output as { status?: string; title?: string; id?: string })
-                                : null;
-                            const inputData =
-                              typeof input === 'object' && input !== null
-                                ? (input as {
-                                    title?: string;
-                                    description?: string;
-                                    dueDate?: string;
-                                    category?: string;
-                                  })
-                                : null;
-
-                            return (
-                              <div
-                                className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <div className="flex items-center gap-2 text-gray-900 mb-2">
-                                  <Check className="size-4 text-green-600" />
-                                  <span className="font-medium">
-                                    Task created: {taskData?.title || inputData?.title || 'Task'}
-                                  </span>
-                                </div>
-                                {inputData && (
-                                  <div className="ml-6 space-y-1 text-xs text-gray-900">
-                                    {inputData.description && (
-                                      <div>
-                                        <span className="font-medium">Description:</span>{' '}
-                                        {inputData.description}
-                                      </div>
-                                    )}
-                                    {inputData.dueDate && (
-                                      <div>
-                                        <span className="font-medium">Due:</span>{' '}
-                                        {new Date(inputData.dueDate).toLocaleString()}
-                                      </div>
-                                    )}
-                                    {inputData.category && (
-                                      <div>
-                                        <span className="font-medium">Category:</span>{' '}
-                                        {inputData.category}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-list_calendar_tasks':
-                      case 'tool-listCalendarTasks': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Fetching tasks...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error fetching tasks
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const totalCount =
-                              typeof output === 'object' &&
-                              output !== null &&
-                              'totalCount' in output
-                                ? Number((output as { totalCount: number }).totalCount) || 0
-                                : 0;
-                            const tasksData =
-                              typeof output === 'object' &&
-                              output !== null &&
-                              'data' in output &&
-                              typeof (output as { data: any }).data === 'object'
-                                ? (output as { data: Record<string, any[]> }).data
-                                : {};
-
-                            // Flatten tasks from all categories
-                            const allTasks: Array<{ category: string; task: any }> = [];
-                            Object.entries(tasksData).forEach(([category, tasks]) => {
-                              if (Array.isArray(tasks)) {
-                                tasks.forEach((task) => {
-                                  allTasks.push({ category, task });
-                                });
-                              }
-                            });
-
-                            if (totalCount === 0 || allTasks.length === 0) {
-                              return (
-                                <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
-                                  <Check className="size-4" /> No tasks found
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
-                                <div className="flex items-center gap-2 text-gray-900 mb-2">
-                                  <Check className="size-4 text-blue-600" />
-                                  <span className="font-medium">
-                                    {totalCount} task{totalCount !== 1 ? 's' : ''} found
-                                  </span>
-                                </div>
-                                <div className="ml-6 space-y-3 max-h-64 overflow-y-auto">
-                                  {Object.entries(tasksData).map(([category, tasks]) => {
-                                    if (!Array.isArray(tasks) || tasks.length === 0) return null;
-                                    return (
-                                      <div key={category} className="space-y-2">
-                                        <div className="font-medium text-xs text-gray-700 uppercase tracking-wide">
-                                          {category}
-                                        </div>
-                                        {tasks.map((task: any) => (
-                                          <div
-                                            key={task.id || task.title}
-                                            className="text-xs text-gray-900 border-b border-border pb-2 last:border-0 last:pb-0"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              {task.status === 'completed' ? (
-                                                <Check className="size-3 text-green-600" />
-                                              ) : (
-                                                <div className="size-3 border border-gray-400 rounded" />
-                                              )}
-                                              <span
-                                                className={
-                                                  task.status === 'completed'
-                                                    ? 'line-through text-muted-foreground'
-                                                    : 'font-medium'
-                                                }
-                                              >
-                                                {task.title}
-                                              </span>
-                                            </div>
-                                            {task.due && (
-                                              <div className="ml-5 text-muted-foreground">
-                                                Due: {new Date(task.due).toLocaleDateString()}
-                                              </div>
-                                            )}
-                                            {task.notes && (
-                                              <div className="ml-5 text-muted-foreground line-clamp-2">
-                                                {task.notes}
-                                              </div>
-                                            )}
-                                            {task.link && (
-                                              <a
-                                                className="ml-5 text-blue-600 hover:underline text-xs"
-                                                href={task.link}
-                                                rel="noopener noreferrer"
-                                                target="_blank"
-                                              >
-                                                View in Google Tasks
-                                              </a>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      case 'tool-fetch_memory':
-                      case 'tool-fetchMemory': {
-                        switch (part.state) {
-                          case 'input-available':
-                          case 'input-streaming':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <Spinner className="size-4" /> Fetching memory...
-                              </div>
-                            );
-                          case 'output-error':
-                            return (
-                              <div
-                                className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900"
-                                key={`${message.id}-${part.type}-${index}`}
-                              >
-                                <X className="size-4" /> Error fetching memory
-                              </div>
-                            );
-                          case 'output-available': {
-                            const output = part.output;
-                            const memoryData =
-                              typeof output === 'object' && output !== null
-                                ? (output as { title?: string; content?: string; id?: string })
-                                : null;
-
-                            if (!memoryData) {
-                              return (
-                                <div className="text-sm flex items-center gap-2 text-muted-foreground text-gray-900">
-                                  <X className="size-4" /> Memory not found
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="text-sm bg-accent/50 rounded-md border border-border bg-white p-3">
-                                <div className="flex items-center gap-2 text-gray-900 mb-2">
-                                  <Check className="size-4 text-green-600" />
-                                  <span className="font-medium">Memory retrieved</span>
-                                </div>
-                                <div className="ml-6 space-y-1 text-xs text-gray-900">
-                                  {memoryData.title && (
-                                    <div className="font-medium text-sm mb-1">
-                                      {memoryData.title}
-                                    </div>
-                                  )}
-                                  {memoryData.content && (
-                                    <div className="text-muted-foreground">
-                                      {memoryData.content}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }
-                          default:
-                            return null;
-                        }
-                      }
-                      default:
-                        return null;
-                    }
-                  })}
-              </div>
-              {message.role === 'assistant' && (
-                <div className="flex items-center gap-0.5 mt-0.5">
-                  <Button
-                    className="size-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        message.parts
-                          .filter((p) => p.type === 'text')
-                          ?.map((p) => (p as any).text)
-                          .join('\n') ?? '',
+                            {part.text}
+                          </Streamdown>
+                        </div>
                       );
-                      console.log('Copied to clipboard');
-                      toast.success('Copied to clipboard');
-                    }}
-                    size="icon"
-                    variant="ghost"
-                  >
-                    <Copy className="size-3.5 text-gray-900" />
-                  </Button>
-                  <Button
-                    className="size-6 text-muted-foreground hover:text-foreground"
-                    onClick={() => regenerate({ messageId: message.id })}
-                    size="icon"
-                    variant="ghost"
-                  >
-                    <RotateCcw className="size-3.5 text-gray-900" />
-                  </Button>
-                </div>
-              )}
+                    }
+
+                    // Tool parts - use the ToolPartRenderer
+                    if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
+                      return (
+                        <ToolPartRenderer
+                          key={`${message.id}-${part.type}-${index}`}
+                          part={part}
+                          messageId={message.id}
+                          index={index}
+                        />
+                      );
+                    }
+
+                    return null;
+                  })}
+
+                {/* Action buttons for assistant messages */}
+                {message.role === 'assistant' && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+                    <Button
+                      className="h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          message.parts
+                            .filter((p) => p.type === 'text')
+                            ?.map((p) => (p as any).text)
+                            .join('\n') ?? '',
+                        );
+                        toast.success('Copied to clipboard');
+                      }}
+                      size="icon"
+                      variant="ghost"
+                    >
+                      <Copy className="size-3.5" />
+                    </Button>
+                    <Button
+                      className="h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                      onClick={() => regenerate({ messageId: message.id })}
+                      size="icon"
+                      variant="ghost"
+                    >
+                      <RotateCcw className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
-          {status === 'submitted' && (
-            <div className="flex text-muted-foreground justify-start gap-2 px-4 py-3 items-center w-full">
-              <Spinner className="size-4 text-gray-900" />
-              <TextShimmer className="text-sm text-gray-900" duration={1.5}>
-                Thinking...
-              </TextShimmer>
-            </div>
-          )}
+
+          {/* Thinking indicator */}
+          {status === 'submitted' && <ThinkingIndicator />}
+
           <div ref={bottomRef} />
         </div>
 
+        {/* Scroll to bottom button */}
         <Button
           className={cn(
-            'rounded-full w-fit mx-auto shadow-md z-10 absolute inset-x-0 bottom-4 flex justify-center',
-            'transition-all duration-200 ease-out',
+            'rounded-full w-fit mx-auto shadow-lg z-10 absolute inset-x-0 bottom-4 flex justify-center',
+            'transition-all duration-200 ease-out bg-white border border-gray-200 text-gray-700 hover:bg-gray-50',
             isFarFromBottom
               ? 'opacity-100 scale-100 pointer-events-auto'
               : 'opacity-0 scale-95 pointer-events-none',
@@ -1769,15 +844,16 @@ export function ChatMessages() {
           }}
           size="sm"
           type="button"
-          variant="default"
+          variant="outline"
         >
           Scroll to bottom
         </Button>
       </div>
 
-      <div className="px-4 pb-4 pt-1 relative flex-shrink-0">
+      {/* Input Area */}
+      <div className="px-4 pb-4 pt-2 relative flex-shrink-0">
         <form
-          className="flex bg-white flex-col items-end gap-3 border border-border border-slate-900 rounded-[22px] p-3 relative shadow-lg dark:shadow-2xl"
+          className="flex bg-white flex-col items-end gap-3 border border-gray-200 rounded-2xl p-3 relative shadow-lg hover:shadow-xl transition-shadow"
           onSubmit={(e) => {
             e.preventDefault();
             if (status === 'submitted') return;
@@ -1798,7 +874,7 @@ export function ChatMessages() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask your follow-up question..."
-            className="w-full text-gray-900 placeholder:text-gray-500 rounded-md outline-none resize-none text-base leading-relaxed px-3 py-3 bg-transparent"
+            className="w-full text-gray-900 placeholder:text-gray-400 rounded-md outline-none resize-none text-base leading-relaxed px-3 py-2 bg-transparent focus:ring-0"
             rows={3}
           />
           <div className="flex items-center justify-between w-full">
@@ -1807,8 +883,8 @@ export function ChatMessages() {
               value={selectedModel}
               onValueChange={(value: ModelType) => setSelectedModel(value)}
             >
-              <SelectTrigger className="h-8 w-auto gap-1.5 border-none shadow-none bg-gray-100 hover:bg-gray-200 text-xs text-gray-700">
-                <Sparkles className="size-3.5 text-gray-500" />
+              <SelectTrigger className="h-8 w-auto gap-1.5 border-none shadow-none bg-gray-100 hover:bg-gray-200 text-xs text-gray-700 rounded-lg transition-colors">
+                <Sparkles className="size-3.5 text-indigo-500" />
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
               <SelectContent>
@@ -1824,16 +900,21 @@ export function ChatMessages() {
             </Select>
 
             {/* Submit Button */}
-            <div className="bg-gray-500 rounded-xl">
-              <Button
-                type="submit"
-                disabled={!input.trim()}
-                className="text-primary-foreground rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary/90"
-                size="icon"
-              >
+            <Button
+              type="submit"
+              disabled={!input.trim() || status === 'submitted'}
+              className={cn(
+                'rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed',
+                'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md hover:shadow-lg',
+              )}
+              size="icon"
+            >
+              {status === 'submitted' ? (
+                <Spinner className="size-4" />
+              ) : (
                 <ArrowUp className="size-4" />
-              </Button>
-            </div>
+              )}
+            </Button>
           </div>
         </form>
       </div>
