@@ -3,6 +3,7 @@ import prisma from '../db/prismaClient.js';
 import { embeddingModelName } from '../gemini.js';
 import logger from '../utils/logger.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { encrypt, decrypt } from '../utils/encryption.js';
 
 export const chatRequestSchema = z.object({
   messages: z.array(z.any()),
@@ -95,6 +96,14 @@ export class MemoryService {
         projectId,
         queryLength: query?.length ?? 0,
       });
+
+      // Get space ownerId for decryption
+      const space = await prisma.space.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true },
+      });
+      const ownerId = space?.ownerId || 'unknown';
+
       // Generate embedding for the query
       const queryEmbedding = await this.generateEmbedding(query);
       const queryVector = JSON.stringify(queryEmbedding);
@@ -140,14 +149,18 @@ export class MemoryService {
         returned: memories.length,
       });
 
-      const results = memories.map((m) => ({
-        documentId: m.id,
-        title: (m.metadata as any)?.title || this.extractTitleFromMemory(m.memory),
-        content: m.memory,
-        score: m.score,
-        url: (m.metadata as any)?.url,
-        createdAt: m.createdAt,
-      }));
+      // Decrypt memory content before returning
+      const results = memories.map((m) => {
+        const decryptedMemory = decrypt(m.memory, ownerId);
+        return {
+          documentId: m.id,
+          title: (m.metadata as any)?.title || this.extractTitleFromMemory(decryptedMemory),
+          content: decryptedMemory,
+          score: m.score,
+          url: (m.metadata as any)?.url,
+          createdAt: m.createdAt,
+        };
+      });
 
       return {
         success: true,
@@ -181,10 +194,10 @@ export class MemoryService {
         projectId,
         memoryLength: memory?.length ?? 0,
       });
-      // Verify space exists and get orgId
+      // Verify space exists and get orgId + ownerId for encryption
       const space = await prisma.space.findUnique({
         where: { id: projectId },
-        select: { orgId: true },
+        select: { orgId: true, ownerId: true },
       });
 
       if (!space) {
@@ -192,9 +205,14 @@ export class MemoryService {
         throw new Error(`Space with id ${projectId} not found`);
       }
 
-      // Generate embedding for the memory (for storage and similarity)
+      const ownerId = space.ownerId;
+
+      // Generate embedding for the memory BEFORE encryption (embedding needs plaintext)
       const embedding = await this.generateEmbedding(memory);
       const embeddingStr = JSON.stringify(embedding);
+
+      // Encrypt the memory for storage
+      const encryptedMemory = encrypt(memory, ownerId);
 
       // Find related existing memories (latest, same space) by cosine similarity using pgvector
       const minUpdateSim = this.getUpdateMinSimilarity();
@@ -249,12 +267,13 @@ export class MemoryService {
           });
         }
 
-        // Create the new memory entry (latest)
+        // Create the new memory entry (latest) - store encrypted memory
         const memoryEntry = await tx.memoryEntry.create({
           data: {
-            memory,
+            memory: encryptedMemory,
             spaceId: projectId,
             orgId: space.orgId,
+            userId: ownerId, // Store ownerId for decryption reference
             version,
             isLatest: true,
             parentMemoryId,
@@ -264,7 +283,7 @@ export class MemoryService {
             memoryEmbeddingNewModel: embeddingModelName(),
             // note: embedding (vector) is inserted via raw query below
             metadata: {
-              title: this.extractTitleFromMemory(memory),
+              title: this.extractTitleFromMemory(memory), // Use plaintext for title extraction
               createdAt: new Date().toISOString(),
               type: 'user_memory',
               source: 'chat',
@@ -355,6 +374,9 @@ export class MemoryService {
           isForgotten: false,
         },
         include: {
+          space: {
+            select: { ownerId: true },
+          },
           documentSources: {
             include: {
               document: {
@@ -375,6 +397,10 @@ export class MemoryService {
         throw new Error('Memory not found');
       }
 
+      // Get ownerId for decryption
+      const ownerId = memory.userId || memory.space?.ownerId || 'unknown';
+      const decryptedContent = decrypt(memory.memory, ownerId);
+
       logger.debug({
         msg: 'Fetched memory with document sources',
         projectId,
@@ -385,7 +411,7 @@ export class MemoryService {
         success: true,
         memory: {
           id: memory.id,
-          content: memory.memory,
+          content: decryptedContent,
           metadata: memory.metadata,
           createdAt: memory.createdAt,
           documentSources: memory.documentSources.map((source) => ({

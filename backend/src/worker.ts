@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { getDefaultChatModel } from './providers/ai-provider.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { encrypt, decrypt } from './utils/encryption.js';
 
 import { createRequire } from 'module';
 // import { title } from 'process'
@@ -174,12 +175,13 @@ export async function registerWorkers() {
           return;
         }
 
-        // Get space info for memory linking
+        // Get space info for memory linking and encryption
         const spaceRows = await prisma.documentsToSpaces.findMany({
           where: { documentId },
-          include: { space: true },
+          include: { space: { select: { id: true, ownerId: true, orgId: true } } },
         });
         const spaceId = spaceRows[0]?.spaceId;
+        const spaceOwnerId = spaceRows[0]?.space?.ownerId || doc.userId;
         if (!spaceId) {
           console.warn(`No space found for document ${documentId}`);
           return;
@@ -273,16 +275,16 @@ export async function registerWorkers() {
             object.memories.length <= 0
           ) {
             console.error('Missing required fields in generated object:', object);
-            await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+            await generateFallbackContent(documentId, doc, spaceId, model, embedder, spaceOwnerId);
             return;
           }
 
-          // Update document with title and summary
+          // Update document with encrypted title and summary
           await prisma.document.update({
             where: { id: documentId },
             data: {
-              title: object.title.trim(),
-              summary: object.summary.trim(),
+              title: encrypt(object.title.trim(), spaceOwnerId),
+              summary: encrypt(object.summary.trim(), spaceOwnerId),
             },
           });
 
@@ -320,13 +322,16 @@ export async function registerWorkers() {
                 const emb = await embedder.embedContent(memory);
                 const memoryId = uuidv4();
 
+                // Encrypt memory content before storage
+                const encryptedMemory = encrypt(memory.trim(), spaceOwnerId);
+
                 await prisma.memoryEntry.create({
                   data: {
                     id: memoryId,
-                    memory: memory.trim(),
+                    memory: encryptedMemory,
                     spaceId: spaceId,
                     orgId: doc.orgId,
-                    userId: doc.userId,
+                    userId: spaceOwnerId, // Store for decryption
                     version: 1,
                     isLatest: true,
                     isInference: false,
@@ -379,7 +384,7 @@ export async function registerWorkers() {
             `[${new Date().toISOString()}] Error in extract_document_essentials:`,
             error,
           );
-          await generateFallbackContent(documentId, doc, spaceId, model, embedder);
+          await generateFallbackContent(documentId, doc, spaceId, model, embedder, spaceOwnerId);
         }
       });
 
@@ -399,6 +404,7 @@ async function generateFallbackContent(
   spaceId: string,
   model: any,
   embedder: any,
+  ownerId: string = 'unknown',
 ) {
   console.log(
     `[${new Date().toISOString()}] Starting fallback content generation for document ${documentId}`,
@@ -424,13 +430,16 @@ async function generateFallbackContent(
       summary = text || 'Summary extraction failed.';
     }
 
-    // Update document with fallback content
+    // Update document with encrypted fallback content
     await prisma.document.update({
       where: { id: documentId },
-      data: { title, summary },
+      data: {
+        title: encrypt(title, ownerId),
+        summary: encrypt(summary, ownerId)
+      },
     });
 
-    // Embed the summary
+    // Embed the summary (use plaintext for embedding)
     try {
       const emb = await embedder.embedContent(summary);
       await prisma.document.update({
@@ -453,12 +462,12 @@ async function generateFallbackContent(
       fallbackError,
     );
 
-    // Ultimate fallback - minimal document update
+    // Ultimate fallback - minimal document update (encrypted)
     await prisma.document.update({
       where: { id: documentId },
       data: {
-        title: `Document ${documentId.substring(0, 8)}`,
-        summary: 'Content processing failed.',
+        title: encrypt(`Document ${documentId.substring(0, 8)}`, ownerId),
+        summary: encrypt('Content processing failed.', ownerId),
       },
     });
   }

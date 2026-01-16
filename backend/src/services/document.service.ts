@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import { boss, JOB_PROCESS_DOCUMENT } from '../queue.js';
+import { decrypt } from '../utils/encryption.js';
 
 // --- Type Definitions for Clarity ---
 
@@ -142,23 +143,30 @@ export async function getDocumentsWithMemories(input: QueryInput, userSpaceIds: 
           where:
             containerTags && containerTags.length > 0
               ? {
-                  memoryEntry: {
-                    space: {
-                      containerTag: {
-                        in: containerTags,
-                      },
+                memoryEntry: {
+                  space: {
+                    containerTag: {
+                      in: containerTags,
                     },
                   },
-                }
+                },
+              }
               : {},
           include: {
             // ...and for each join record, we include the full memory entry.
             // This nested include is the key to getting all related data.
             memoryEntry: {
               include: {
-                space: true, // Include space to get containerTag
+                space: { select: { containerTag: true, ownerId: true } }, // Include ownerId for decryption
               },
             },
+          },
+        },
+        // Include space info for document decryption
+        documentsToSpaces: {
+          take: 1,
+          include: {
+            space: { select: { ownerId: true } },
           },
         },
       },
@@ -168,16 +176,24 @@ export async function getDocumentsWithMemories(input: QueryInput, userSpaceIds: 
   // 5. Transform the raw database data into the precise API response shape.
   // This is the most critical step to ensure the output matches the Zod schema.
   const formattedDocuments: FormattedDocument[] = documentsFromDb.map((doc) => {
-    const { memorySources, ...documentData } = doc;
+    const { memorySources, documentsToSpaces, ...documentData } = doc;
+
+    // Get ownerId for decryption from space or document
+    const docOwnerId = documentsToSpaces?.[0]?.space?.ownerId || documentData.userId || 'unknown';
 
     // Map over the join table entries to format each memory entry
     const memoryEntries: FormattedMemoryEntry[] = memorySources.map((source) => {
       const { memoryEntry, ...sourceData } = source;
 
+      // Get ownerId for memory decryption
+      const memOwnerId = memoryEntry.userId || memoryEntry.space?.ownerId || docOwnerId;
+
       // This object combines the memory entry data with the join table data
       // to perfectly match the `MemoryEntryAPISchema`.
       return {
         ...memoryEntry,
+        // Decrypt memory content
+        memory: decrypt(memoryEntry.memory, memOwnerId),
         // --- Data Type Conversions ---
         memoryEmbedding: parseVectorString(memoryEntry.memoryEmbedding),
         memoryEmbeddingNew: parseVectorString(memoryEntry.memoryEmbeddingNew),
@@ -196,6 +212,10 @@ export async function getDocumentsWithMemories(input: QueryInput, userSpaceIds: 
     // to perfectly match the `DocumentWithMemoriesSchema`.
     return {
       ...documentData,
+      // Decrypt document fields
+      title: documentData.title ? decrypt(documentData.title, docOwnerId) : null,
+      summary: documentData.summary ? decrypt(documentData.summary, docOwnerId) : null,
+      content: documentData.content ? decrypt(documentData.content, docOwnerId) : null,
       // --- Data Type Conversions ---
       summaryEmbedding: parseVectorString(documentData.summaryEmbedding),
       averageChunkSize: documentData.averageChunkSize

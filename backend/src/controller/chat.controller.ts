@@ -52,11 +52,11 @@ export async function chatRequest(req: Request, res: Response) {
       search_memories: tool({
         name: 'search_memories',
         description:
-          "Search user memories and patterns. Run when explicitly asked or when context about user's past choices would be helpful. Uses semantic matching to find relevant details across related experiences.",
+          "PRIMARY TOOL for answering questions about people, personal info, preferences, past experiences, contacts, or anything the user has shared before. Use this FIRST when asked 'who is X', 'what is my favorite X', 'do I know X', etc. Returns relevant memories with full content.",
         inputSchema: z.object({
           informationToGet: z
             .string()
-            .describe("The information to search for in the user's memories."),
+            .describe("What to search for - e.g., 'Ayush Patil information', 'favorite beverage', 'email address of John'"),
         }),
         execute: async ({ informationToGet }: { informationToGet: string }) => {
           console.log(`[Memory Search] Query: ${informationToGet}, Project: ${projectId}`);
@@ -121,7 +121,16 @@ export async function chatRequest(req: Request, res: Response) {
             console.log(`Score: ${memory.score}`);
           });
 
-          return { count: dynamicMemories.length, results: dynamicMemories };
+          // Include instruction to force LLM to synthesize
+          const instruction = dynamicMemories.length > 0
+            ? `IMPORTANT: You found ${dynamicMemories.length} relevant memories. NOW you must read the 'content' field of each result and write a helpful response that answers the user's question using this information. DO NOT just say "I found X memories" - actually share the information!`
+            : 'No memories found for this query. Tell the user you don\'t have stored information about this.';
+
+          return {
+            count: dynamicMemories.length,
+            results: dynamicMemories,
+            _instruction: instruction
+          };
         },
       }),
 
@@ -155,81 +164,7 @@ export async function chatRequest(req: Request, res: Response) {
         },
       }),
 
-      search_contact: tool({
-        name: 'search_contact',
-        description:
-          "Search for a person's contact information (email, phone) in the user's memories. Use this to find email addresses before sending emails. Returns email addresses and any other contact details stored about a person.",
-        inputSchema: z.object({
-          personName: z
-            .string()
-            .describe(
-              "The name of the person to find contact information for (e.g., 'Ayush Patil', 'John').",
-            ),
-        }),
-        execute: async ({ personName }: { personName: string }) => {
-          console.log(`[Contact Search] Looking for: ${personName}, Project: ${projectId}`);
-          // Search memories for contact information
-          const searchQuery = `${personName} email contact phone number`;
-          const response = await memoryService.searchMemories(searchQuery, projectId);
-
-          if (!response.success || !response.results || response.results.length === 0) {
-            return {
-              found: false,
-              person: personName,
-              email: null,
-              phone: null,
-              note: `No contact information found for "${personName}" in memories.`,
-            };
-          }
-
-          // Extract email patterns from results
-          const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
-          const phonePattern = /(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g;
-
-          let foundEmails: string[] = [];
-          let foundPhones: string[] = [];
-          let relevantMemories: any[] = [];
-
-          for (const result of response.results.slice(0, 5)) {
-            const content = result.content || '';
-            const title = result.title || '';
-            const combined = `${title} ${content}`;
-
-            const emails = combined.match(emailPattern);
-            const phones = combined.match(phonePattern);
-
-            if (emails) foundEmails.push(...emails);
-            if (phones) foundPhones.push(...phones);
-
-            // Check if this memory mentions the person's name
-            if (combined.toLowerCase().includes(personName.toLowerCase())) {
-              relevantMemories.push({
-                title: result.title,
-                content: result.content,
-                score: result.score,
-              });
-            }
-          }
-
-          // Deduplicate
-          foundEmails = [...new Set(foundEmails)];
-          foundPhones = [...new Set(foundPhones)];
-
-          return {
-            found: foundEmails.length > 0 || foundPhones.length > 0,
-            person: personName,
-            email: foundEmails.length > 0 ? foundEmails[0] : null,
-            allEmails: foundEmails,
-            phone: foundPhones.length > 0 ? foundPhones[0] : null,
-            allPhones: foundPhones,
-            memories: relevantMemories.slice(0, 3),
-            note:
-              foundEmails.length > 0
-                ? `Found ${foundEmails.length} email(s) for ${personName}.`
-                : `No email found for "${personName}". You may need to ask the user for the email address.`,
-          };
-        },
-      }),
+      // Note: search_contact tool removed - use search_memories instead for person lookups
 
       get_calendar_events: tool({
         name: 'get_calendar_events',
@@ -310,12 +245,12 @@ export async function chatRequest(req: Request, res: Response) {
 
       get_emails: tool({
         name: 'get_emails',
-        description: 'List emails with metadata (Subject, Sender, Date). Optimized for lists.',
+        description: 'ONLY for fetching actual Gmail messages. NOT for finding info about people - use search_memories for that. List emails with metadata (Subject, Sender, Date).',
         inputSchema: z.object({
           filter: z
             .string()
             .optional()
-            .describe("Specific Gmail search query like 'from:boss@gmail.com'."),
+            .describe("Gmail search query like 'from:boss@gmail.com' or 'is:unread'."),
           category: z
             .enum(['INBOX', 'SENT', 'DRAFT', 'STARRED', 'ARCHIVED', 'SPAM', 'ALL'])
             .optional()
@@ -357,28 +292,35 @@ export async function chatRequest(req: Request, res: Response) {
 [Current Date & Time]: ${new Date().toISOString()}
 [userId]: ${userId}
 
-**CORE RESPONSIBILITIES:**
+**CRITICAL RULE - YOU MUST FOLLOW THIS:**
+After using ANY tool, you MUST write a natural language response that synthesizes the information. DO NOT just list what the tool returned or say "search completed". Actually READ the content and respond to the user's question.
 
-1. **Personal Memories:** Use 'search_memories' / 'add_memory' when the question relates to the user's preferences, past choices, or specific stored facts.
-2. **Google Workspace:** Use the provided tools to manage the user's Calendar, Tasks, and Emails.
+**TOOL SELECTION:**
+1. Questions about PEOPLE, PREFERENCES, PERSONAL INFO → use search_memories
+2. Questions about actual EMAIL messages → use get_emails  
+3. Questions about CALENDAR → use get_calendar_events
 
-**TOOL USAGE GUIDELINES:**
+**RESPONSE SYNTHESIS (MOST IMPORTANT):**
 
-* **Multi-Step Operations:** You can use multiple tools in sequence to accomplish complex tasks. For example, first search memories, then create a calendar event based on what you found.
-* **Calendar & Tasks:**
-    * When creating events or tasks, infer the current year/date from [Current Date & Time] if not specified.
-    * If a user asks to "List my tasks", check if they specified a category (e.g., "Work"). If not, check all lists or ask for clarification if needed.
-* **Email:**
-    * When fetching emails, use the \`limit\` parameter to keep responses concise unless the user asks for many.
-    * **Privacy:** Do not read out full email bodies unless explicitly asked. Summarize the 'snippet' or 'subject' first.
+When search_memories returns results like:
+\`\`\`
+{results: [{content: "Ayush A. Patil's LinkedIn profile is Ayush Patil. He studied B.Tech at YCCE."}]}
+\`\`\`
 
-**RESPONSE FORMATTING (CRITICAL):**
+You MUST respond with something like:
+"Ayush Patil is someone you know! Based on your memories, he studied B.Tech at YCCE and his LinkedIn profile name is Ayush Patil."
 
-* **Synthesize, Don't Dump:** Never output raw JSON or tool return values directly.
-    * *Bad:* "Function returned { status: 'success', title: 'Meeting' }"
-    * *Good:* "I've successfully scheduled the 'Meeting' for you."
-* **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
-* **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
+**WRONG (DO NOT DO THIS):**
+- "I found 3 memories about Ayush."
+- "Search completed. Here are the results..."
+- Just dumping the JSON/raw data
+
+**CORRECT:**
+- Read the 'content' field of each memory
+- Extract the relevant facts that answer the user's question
+- Write a helpful, conversational response using those facts
+
+Remember: The user asked a QUESTION. You have the tool RESULTS. Now ANSWER the question using those results!
 `;
 
     // Convert messages to model format
@@ -488,9 +430,10 @@ export async function chatRequestWithID(req: Request, res: Response) {
     const tools = {
       search_memories: tool({
         name: 'search_memories',
-        description: 'Search user memories and patterns.',
+        description:
+          "PRIMARY TOOL for answering questions about people, personal info, preferences, past experiences, contacts, or anything the user has shared before. Use this FIRST when asked 'who is X', 'what is my favorite X', 'do I know X', etc. Returns relevant memories with full content.",
         inputSchema: z.object({
-          informationToGet: z.string().describe('The information to search for.'),
+          informationToGet: z.string().describe("What to search for - e.g., 'Ayush Patil information', 'favorite beverage', 'email address of John'"),
         }),
         execute: async ({ informationToGet }: { informationToGet: string }) => {
           console.log(`[Memory Search] Query: ${informationToGet}, Project: ${projectId}`);
@@ -568,9 +511,15 @@ export async function chatRequestWithID(req: Request, res: Response) {
           //   `[Memory Search] Dynamic Selection => quality=${quality.toFixed(3)} topScore=${topScore.toFixed(3)} chosenCount=${chosenCount} scores=[${scores.map((s) => s.toFixed(2)).join(', ')}]`,
           // );
 
+          // Include instruction to force LLM to synthesize
+          const instruction = dynamicMemories.length > 0
+            ? `IMPORTANT: You found ${dynamicMemories.length} relevant memories. NOW you must read the 'content' field of each result and write a helpful response that answers the user's question using this information. DO NOT just say "I found X memories" - actually share the information!`
+            : 'No memories found for this query. Tell the user you don\'t have stored information about this.';
+
           return {
             count: dynamicMemories.length,
             results: dynamicMemories,
+            _instruction: instruction
           };
         },
       }),
@@ -606,77 +555,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
         },
       }),
 
-      search_contact: tool({
-        name: 'search_contact',
-        description:
-          "Search for a person's contact information (email, phone) in the user's memories. Use this to find email addresses before sending emails. Returns email addresses and any other contact details stored about a person.",
-        inputSchema: z.object({
-          personName: z
-            .string()
-            .describe(
-              "The name of the person to find contact information for (e.g., 'Ayush Patil', 'John').",
-            ),
-        }),
-        execute: async ({ personName }: { personName: string }) => {
-          console.log(`[Contact Search] Looking for: ${personName}, Project: ${projectId}`);
-          const searchQuery = `${personName} email contact phone number`;
-          const response = await memoryService.searchMemories(searchQuery, projectId);
-
-          if (!response.success || !response.results || response.results.length === 0) {
-            return {
-              found: false,
-              person: personName,
-              email: null,
-              phone: null,
-              note: `No contact information found for "${personName}" in memories.`,
-            };
-          }
-
-          const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
-          const phonePattern = /(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g;
-
-          let foundEmails: string[] = [];
-          let foundPhones: string[] = [];
-          let relevantMemories: any[] = [];
-
-          for (const result of response.results.slice(0, 5)) {
-            const content = result.content || '';
-            const title = result.title || '';
-            const combined = `${title} ${content}`;
-
-            const emails = combined.match(emailPattern);
-            const phones = combined.match(phonePattern);
-
-            if (emails) foundEmails.push(...emails);
-            if (phones) foundPhones.push(...phones);
-
-            if (combined.toLowerCase().includes(personName.toLowerCase())) {
-              relevantMemories.push({
-                title: result.title,
-                content: result.content,
-                score: result.score,
-              });
-            }
-          }
-
-          foundEmails = [...new Set(foundEmails)];
-          foundPhones = [...new Set(foundPhones)];
-
-          return {
-            found: foundEmails.length > 0 || foundPhones.length > 0,
-            person: personName,
-            email: foundEmails.length > 0 ? foundEmails[0] : null,
-            allEmails: foundEmails,
-            phone: foundPhones.length > 0 ? foundPhones[0] : null,
-            allPhones: foundPhones,
-            memories: relevantMemories.slice(0, 3),
-            note:
-              foundEmails.length > 0
-                ? `Found ${foundEmails.length} email(s) for ${personName}.`
-                : `No email found for "${personName}". You may need to ask the user for the email address.`,
-          };
-        },
-      }),
+      // Note: search_contact tool removed - use search_memories instead for person lookups
 
       get_calendar_events: tool({
         name: 'get_calendar_events',
@@ -759,14 +638,12 @@ export async function chatRequestWithID(req: Request, res: Response) {
       get_emails: tool({
         name: 'get_emails',
         description:
-          'List emails to find information or specific messages. USE THIS TO FIND CONTACTS OR EMAIL ADDRESSES by searching for their name (e.g. filter: "Ayush").',
+          'ONLY for fetching actual Gmail messages. NOT for finding info about people - use search_memories for that. List emails with metadata (Subject, Sender, Date).',
         inputSchema: z.object({
           filter: z
             .string()
             .optional()
-            .describe(
-              "Gmail search query. To find a person's email, search for their name here (e.g. 'Ayush'). OR use standard queries like 'from:boss@gmail.com'.",
-            ),
+            .describe("Gmail search query like 'from:boss@gmail.com' or 'is:unread'."),
           category: z
             .enum(['INBOX', 'SENT', 'DRAFT', 'STARRED', 'ARCHIVED', 'SPAM', 'ALL'])
             .optional()
@@ -810,28 +687,35 @@ export async function chatRequestWithID(req: Request, res: Response) {
 [Current Date & Time]: ${new Date().toISOString()}
 [userId]: ${userId}
 
-**CORE RESPONSIBILITIES:**
+**CRITICAL RULE - YOU MUST FOLLOW THIS:**
+After using ANY tool, you MUST write a natural language response that synthesizes the information. DO NOT just list what the tool returned or say "search completed". Actually READ the content and respond to the user's question.
 
-1. **Personal Memories:** Use 'search_memories' / 'add_memory' when the question relates to the user's preferences, past choices, or specific stored facts.
-2. **Google Workspace:** Use the provided tools to manage the user's Calendar, Tasks, and Emails.
+**TOOL SELECTION:**
+1. Questions about PEOPLE, PREFERENCES, PERSONAL INFO → use search_memories
+2. Questions about actual EMAIL messages → use get_emails  
+3. Questions about CALENDAR → use get_calendar_events
 
-**TOOL USAGE GUIDELINES:**
+**RESPONSE SYNTHESIS (MOST IMPORTANT):**
 
-* **Multi-Step Operations:** You can use multiple tools in sequence to accomplish complex tasks. For example, first search memories, then create a calendar event based on what you found.
-* **Calendar & Tasks:**
-    * When creating events or tasks, infer the current year/date from [Current Date & Time] if not specified.
-    * If a user asks to "List my tasks", check if they specified a category (e.g., "Work"). If not, check all lists or ask for clarification if needed.
-* **Email:**
-    * When fetching emails, use the \`limit\` parameter to keep responses concise unless the user asks for many.
-    * **Privacy:** Do not read out full email bodies unless explicitly asked. Summarize the 'snippet' or 'subject' first.
+When search_memories returns results like:
+\`\`\`
+{results: [{content: "Ayush A. Patil's LinkedIn profile is Ayush Patil. He studied B.Tech at YCCE."}]}
+\`\`\`
 
-**RESPONSE FORMATTING (CRITICAL):**
+You MUST respond with something like:
+"Ayush Patil is someone you know! Based on your memories, he studied B.Tech at YCCE and his LinkedIn profile name is Ayush Patil."
 
-* **Synthesize, Don't Dump:** Never output raw JSON or tool return values directly.
-    * *Bad:* "Function returned { status: 'success', title: 'Meeting' }"
-    * *Good:* "I've successfully scheduled the 'Meeting' for you."
-* **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
-* **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
+**WRONG (DO NOT DO THIS):**
+- "I found 3 memories about Ayush."
+- "Search completed. Here are the results..."
+- Just dumping the JSON/raw data
+
+**CORRECT:**
+- Read the 'content' field of each memory
+- Extract the relevant facts that answer the user's question
+- Write a helpful, conversational response using those facts
+
+Remember: The user asked a QUESTION. You have the tool RESULTS. Now ANSWER the question using those results!
 `;
 
     let result;
