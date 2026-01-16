@@ -6,18 +6,18 @@ import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { isAuthenticated } from "./middleware/auth.middleware";
+import { isAuthenticated } from './middleware/auth.middleware';
 // const { PrismaSessionStore } = require('@quixo3/prisma-session-store');
-import {getProfile} from "./controller/user.controller.js"
-import passport from "passport"
+import { getProfile } from './controller/user.controller.js';
+import passport from 'passport';
 import { AuthService } from './services/auth.service.js';
-import session from "express-session"
-import connectPgSimple from "connect-pg-simple" 
+import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 // import PassportGoogle from 'passport-google-oauth20';
 // const GoogleStrategy = PassportGoogle.Strategy;
 import prisma from './db/prismaClient.js';
-import pg from "pg"
+import pg from 'pg';
 // const pg = require('pg');
 // import logger from "./utils/logger";
 // import { requestLogger } from "./middleware/requestLogger.js";
@@ -27,7 +27,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import documentRoutes from './routes/document.routes';
 import chatRoutes from './routes/chat.routes';
 // import { Session } from 'inspector/promises';
-import authRoutes from "./routes/auth.routes.js"
+import authRoutes from './routes/auth.routes.js';
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -35,38 +35,41 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
 ];
 
-
-const PgSession= connectPgSimple(session);
+const PgSession = connectPgSimple(session);
 const corsOptions: cors.CorsOptions = {
   origin: function (origin, callback) {
     // Allow all origins in development
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
-    
+
     // In production, only allow specific origins
     if (origin && allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
+
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'user-agent'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  exposedHeaders: ['set-cookie']
+  exposedHeaders: ['set-cookie'],
 };
-const pgPool = new pg.Pool({
-    user: process.env.DB_USER || 'your_db_user',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'your_db_name',
-    password: process.env.DB_PASSWORD || 'your_db_password',
-    port: Number(process.env.DB_PORT) || 5432,
-});
+// Use DATABASE_URL for session store (same as Prisma and pg-boss)
+// In production (AWS RDS), SSL is required
+const pgPoolConfig: pg.PoolConfig = {
+  connectionString: process.env.DATABASE_URL,
+  // Enable SSL for production (AWS RDS)
+  // rejectUnauthorized: false allows AWS RDS certificates
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+};
+
+if (!process.env.DATABASE_URL) {
+  console.error('WARNING: DATABASE_URL is not set. Session store will not work properly.');
+}
+
+const pgPool = new pg.Pool(pgPoolConfig);
 const app = express();
-
-
-
 
 //TODO: Local file storage for demo purposes. Replace with S3/GCS in prod.
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -118,25 +121,28 @@ app.use(
     max: 100,
   }),
 );
-app.use(session({
+app.use(
+  session({
     store: new PgSession({
-        pool: pgPool,
-        tableName: 'session',
-        createTableIfMissing: true
+      pool: pgPool,
+      tableName: 'session',
+      createTableIfMissing: true,
     }),
     secret: process.env.SESSION_SECRET || 'your_secret_key',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        secure: process.env.NODE_ENV === 'production',
-        // httpOnly: true,
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        domain: process.env.NODE_ENV === 'production' ? 'yourdomain.com' : 'localhost'
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      secure: process.env.NODE_ENV === 'production',
+      // httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      domain:
+        process.env.COOKIE_DOMAIN ||
+        (process.env.NODE_ENV === 'production' ? undefined : 'localhost'),
     },
-    name: 'connect.sid' // Default session ID cookie name
-}));
-
+    name: 'connect.sid', // Default session ID cookie name
+  }),
+);
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -149,26 +155,30 @@ app.use(passport.session());
 //   next();
 // });
 
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID as string,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL as string,
-  passReqToCallback: true 
-},
-async (req: any, accessToken: string, refreshToken: string, profile:any, done: any) => {
-  try {
-    console.log('Google profile received:', profile);
-    const user = await AuthService.findOrCreateUser(profile, {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
-    console.log('User from AuthService:', user);
-    return done(null, user);
-  } catch (error) {
-    console.error('Error in GoogleStrategy:', error);
-    return done(error, null);
-  }
-}));
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL as string,
+      passReqToCallback: true,
+    },
+    async (req: any, accessToken: string, refreshToken: string, profile: any, done: any) => {
+      try {
+        console.log('Google profile received:', profile);
+        const user = await AuthService.findOrCreateUser(profile, {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        console.log('User from AuthService:', user);
+        return done(null, user);
+      } catch (error) {
+        console.error('Error in GoogleStrategy:', error);
+        return done(error, null);
+      }
+    },
+  ),
+);
 
 passport.serializeUser((user: any, done) => {
   // console.log('Serializing user:', user);
@@ -184,15 +194,15 @@ passport.serializeUser((user: any, done) => {
 passport.deserializeUser(async (id: number, done) => {
   try {
     console.log('Deserializing user with ID:', id);
-    const user = await prisma.user.findUnique({ 
-      where: { id } 
+    const user = await prisma.user.findUnique({
+      where: { id },
     });
-    
+
     if (!user) {
       console.error('No user found with ID:', id);
       return done(new Error('User not found'), null);
     }
-    
+
     // console.log('Found user:', user);
     done(null, user);
   } catch (error) {
@@ -202,7 +212,7 @@ passport.deserializeUser(async (id: number, done) => {
 });
 
 // Add multer middleware for file uploads
-app.use('/v3/documents/file', upload.single('file'), (err:any, req:any, res:any, next:any) => {
+app.use('/v3/documents/file', upload.single('file'), (err: any, req: any, res: any, next: any) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: 'File size exceeds 10MB limit' });
@@ -219,8 +229,8 @@ app.get('/health', (_req, res) => res.send({ status: 'ok' }));
 app.use('/', documentRoutes);
 app.use('/', chatRoutes);
 
-app.use("/auth", authRoutes);
-app.use("/user/profile", isAuthenticated,getProfile);
+app.use('/auth', authRoutes);
+app.use('/user/profile', isAuthenticated, getProfile);
 // app.use("/api/auth", authRoutes);
 // app.use("/api/users", usersRoutes);
 // Add this before your error handler
@@ -230,13 +240,12 @@ app.get('/api/session', (req, res) => {
   res.json({
     session: req.session,
     user: req.user,
-    isAuthenticated: req.isAuthenticated()
+    isAuthenticated: req.isAuthenticated(),
   });
 });
-app.get("/health",(req, res)=>{
-  
-  res.json({message:"server is running"})
-})
+app.get('/health', (req, res) => {
+  res.json({ message: 'server is running' });
+});
 app.use(errorHandler);
 
 export default app;

@@ -1,5 +1,14 @@
-version: "3.8"
+# =============================================================================
+# LOCAL DEVELOPMENT ONLY
+# =============================================================================
+# This docker-compose file is for local development only.
+# For production, use AWS RDS PostgreSQL instead.
+# See docs/AWS_RDS_DEPLOYMENT.md for production setup instructions.
+# =============================================================================
+
+version: '3.8'
 services:
+  # Main application database
   db:
     image: postgres:15
     environment:
@@ -9,12 +18,13 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - '5432:5432'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 10s
       retries: 5
 
+  # Embeddings database with pgvector extension
   embeddings_db:
     image: pgvector/pgvector:pg15
     environment:
@@ -25,9 +35,9 @@ services:
       - embeddings-data:/var/lib/postgresql/data
       - ./docker/init/embeddings_init.sql:/docker-entrypoint-initdb.d/embeddings_init.sql:ro
     ports:
-      - "5433:5432"
+      - '5433:5432'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 10s
       retries: 5
 
