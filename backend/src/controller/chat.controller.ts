@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { streamText, tool } from 'ai';
-import { getChatModel, getDefaultChatModel, getProChatModel } from '../providers/ai-provider';
+import { getChatModel, getDefaultChatModel, getProChatModel } from '../providers/ai-provider.js';
 import { google } from '@ai-sdk/google';
 import prisma from '../db/prismaClient.js';
 import { z } from 'zod';

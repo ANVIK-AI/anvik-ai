@@ -8,7 +8,7 @@ import path from 'path';
 import { TaskType } from '@google/generative-ai';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getDefaultChatModel } from './providers/ai-provider';
+import { getDefaultChatModel } from './providers/ai-provider.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
