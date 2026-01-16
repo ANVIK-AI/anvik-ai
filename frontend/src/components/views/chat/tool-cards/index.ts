@@ -10,6 +10,16 @@ export {
   type ToolState,
 } from './tool-card-base';
 
+// Tool call grouping for multi-step operations
+export {
+  ToolCallGroup,
+  ToolStepContainer,
+  MultiStepProgress,
+  invocationStateToToolState,
+  type ToolInvocation,
+  type ToolCallGroupProps,
+} from './tool-call-group';
+
 // Email tool cards
 export { GetEmailsCard, GetEmailDetailsCard, SendEmailCard } from './email-tool-card';
 

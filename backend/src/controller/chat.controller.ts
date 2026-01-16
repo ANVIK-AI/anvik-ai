@@ -32,12 +32,12 @@ const memoryService = new MemoryService();
 export async function chatRequest(req: Request, res: Response) {
   try {
     console.log('Chat request Triggered \n\nREQ BODY:', req.body);
-    // console.log("REQ HEADERS:", req.headers);
 
     const { messages, metadata } = chatRequestSchema.parse(req.body);
     const { projectId } = metadata;
     const userId = req.user.id;
     console.log(metadata);
+
     // Verify the project/space exists
     const space = await prisma.space.findUnique({
       where: { id: projectId },
@@ -47,6 +47,7 @@ export async function chatRequest(req: Request, res: Response) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
+    // Define tools with consistent naming
     const tools = {
       search_memories: tool({
         name: 'search_memories',
@@ -61,27 +62,66 @@ export async function chatRequest(req: Request, res: Response) {
           console.log(`[Memory Search] Query: ${informationToGet}, Project: ${projectId}`);
           const response = await memoryService.searchMemories(informationToGet, projectId);
 
-          // Process and format the memories
           if (!response.success || !response.results || response.results.length === 0) {
-            return { memories: [], note: 'No relevant memories found.' };
+            return { count: 0, results: [], note: 'No relevant memories found.' };
           }
-          // Take top 3 most relevant memories
-          const topMemories = response.results.slice(0, 3).map((mem) => ({
+
+          // Dynamic memory selection based on quality
+          const maxCandidates = Math.min(10, response.results.length);
+          const candidateResults = response.results.slice(0, maxCandidates);
+          const scores = candidateResults.map((r) => (typeof r.score === 'number' ? r.score : 0));
+
+          const topScore = scores[0];
+          const avgTop5 =
+            scores.slice(0, Math.min(5, scores.length)).reduce((a, b) => a + b, 0) /
+            Math.min(5, scores.length);
+          const avgAll = scores.reduce((a, b) => a + b, 0) / scores.length;
+          const quality = (topScore + avgTop5 + avgAll) / 3;
+
+          const qualityBands = [
+            { threshold: 0.3, count: 2 },
+            { threshold: 0.45, count: 3 },
+            { threshold: 0.55, count: 4 },
+            { threshold: 0.65, count: 5 },
+            { threshold: 0.72, count: 6 },
+            { threshold: 0.8, count: 7 },
+            { threshold: 0.87, count: 8 },
+            { threshold: 0.93, count: 9 },
+            { threshold: 0.97, count: 10 },
+          ];
+          let baseCount = 2;
+          for (const band of qualityBands) {
+            if (quality >= band.threshold) baseCount = band.count;
+            else break;
+          }
+
+          const dropIndex = scores.findIndex((s, i) => i > 1 && s < topScore * 0.55);
+          if (dropIndex !== -1) {
+            baseCount = Math.min(baseCount, Math.max(2, dropIndex));
+          }
+
+          const denseCluster = scores.filter((s) => topScore - s <= 0.05).length;
+          if (denseCluster >= 4) {
+            baseCount = Math.max(baseCount, denseCluster);
+          }
+
+          const chosenCount = Math.min(Math.max(baseCount, 2), maxCandidates);
+          const dynamicMemories = candidateResults.slice(0, chosenCount).map((mem) => ({
+            documentId: mem.documentId,
             title: mem.title,
             content: mem.content,
-            relevance: Math.round((mem.score || 0) * 100),
+            url: mem.url,
+            score: mem.score,
           }));
 
-          // console.log(`[Memory Search] Top Memories: ${JSON.stringify(topMemories)}`);
           console.log('[Memory Search] Top Memories:');
-          topMemories.forEach((memory, index) => {
+          dynamicMemories.forEach((memory, index) => {
             console.log(`\n--- Memory ${index + 1} ---`);
             console.log(`Title: ${memory.title}`);
-            console.log(`Content: ${memory.content}`);
-            console.log(`Relevance: ${memory.relevance}%`);
+            console.log(`Score: ${memory.score}`);
           });
 
-          return { memories: topMemories };
+          return { count: dynamicMemories.length, results: dynamicMemories };
         },
       }),
 
@@ -94,7 +134,12 @@ export async function chatRequest(req: Request, res: Response) {
         }),
         execute: async ({ memory }: { memory: string }) => {
           console.log(`[Memory Add] Memory: ${memory}, Project: ${projectId}`);
-          return await memoryService.addMemory(memory, projectId);
+          const result = await memoryService.addMemory(memory, projectId);
+          return {
+            success: result.success,
+            memoryId: result.memory?.id,
+            status: result.memory?.status,
+          };
         },
       }),
 
@@ -111,7 +156,7 @@ export async function chatRequest(req: Request, res: Response) {
       }),
 
       get_calendar_events: tool({
-        name: 'getCalendarEvents',
+        name: 'get_calendar_events',
         description: 'Get a list of Google Calendar events for a specific date range.',
         inputSchema: z.object({
           minTime: z.string().describe('The start date/time (ISO 8601 or YYYY-MM-DD).'),
@@ -123,7 +168,7 @@ export async function chatRequest(req: Request, res: Response) {
       }),
 
       set_calendar_event: tool({
-        name: 'setCalendarEvent',
+        name: 'set_calendar_event',
         description: 'Set a calendar event. All times must include a timezone.',
         inputSchema: z.object({
           summary: z.string().describe('The title or summary of the event.'),
@@ -145,9 +190,8 @@ export async function chatRequest(req: Request, res: Response) {
         },
       }),
 
-      // --- ✅ Tasks Tools ---
       set_calendar_task: tool({
-        name: 'setCalendarTask',
+        name: 'set_calendar_task',
         description: 'Creates a new task in Google Tasks.',
         inputSchema: z.object({
           title: z.string().describe('The main title of the task.'),
@@ -168,7 +212,7 @@ export async function chatRequest(req: Request, res: Response) {
       }),
 
       list_calendar_tasks: tool({
-        name: 'listCalendarTasks',
+        name: 'list_calendar_tasks',
         description: 'List and filter tasks from Google Tasks.',
         inputSchema: z.object({
           category: z
@@ -188,9 +232,8 @@ export async function chatRequest(req: Request, res: Response) {
         },
       }),
 
-      // --- 📧 Email Tools ---
       get_emails: tool({
-        name: 'getEmails',
+        name: 'get_emails',
         description: 'List emails with metadata (Subject, Sender, Date). Optimized for lists.',
         inputSchema: z.object({
           filter: z
@@ -209,7 +252,7 @@ export async function chatRequest(req: Request, res: Response) {
       }),
 
       get_email_details: tool({
-        name: 'getEmailDetails',
+        name: 'get_email_details',
         description: 'Get the full body content of a specific email using its ID.',
         inputSchema: z.object({
           messageId: z.string().describe('The unique ID of the email to fetch.'),
@@ -220,7 +263,7 @@ export async function chatRequest(req: Request, res: Response) {
       }),
 
       send_email: tool({
-        name: 'sendEmail',
+        name: 'send_email',
         description: 'Send a new email to a recipient.',
         inputSchema: z.object({
           to: z.string().email().describe("Recipient's email address."),
@@ -233,41 +276,7 @@ export async function chatRequest(req: Request, res: Response) {
       }),
     };
 
-    // Set headers for streaming response
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    const resAny = res as any;
-    if (typeof resAny.flushHeaders === 'function') {
-      resAny.flushHeaders();
-    }
-    res.write('\n');
-
-    // Manual multi-turn implementation for Gemini
-    const conversationMessages = [...messages];
-    let continueLoop = true;
-    let iterationCount = 0;
-    const maxIterations = 5;
-
-    while (continueLoop && iterationCount < maxIterations) {
-      iterationCount++;
-      console.log(`[Iteration ${iterationCount}] Starting generation`);
-
-      const now = new Date().toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        dateStyle: 'full',
-        timeStyle: 'medium',
-      });
-
-      let result;
-      try {
-        result = await streamText({
-          model: metadata.model ? getChatModel(metadata.model) : getProChatModel(),
-          messages: conversationMessages,
-          tools: tools,
-          system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
+    const systemPrompt = `You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
 
 [Current Date & Time]: ${new Date().toISOString()}
 [userId]: ${userId}
@@ -279,6 +288,7 @@ export async function chatRequest(req: Request, res: Response) {
 
 **TOOL USAGE GUIDELINES:**
 
+* **Multi-Step Operations:** You can use multiple tools in sequence to accomplish complex tasks. For example, first search memories, then create a calendar event based on what you found.
 * **Calendar & Tasks:**
     * When creating events or tasks, infer the current year/date from [Current Date & Time] if not specified.
     * If a user asks to "List my tasks", check if they specified a category (e.g., "Work"). If not, check all lists or ask for clarification if needed.
@@ -293,120 +303,63 @@ export async function chatRequest(req: Request, res: Response) {
     * *Good:* "I've successfully scheduled the 'Meeting' for you."
 * **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
 * **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
-`,
-        });
-      } catch (streamError) {
-        console.error(`[Iteration ${iterationCount}] Error calling streamText:`, streamError);
-        const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown error';
-        const isNetworkError =
-          errorMessage.includes('ENOTFOUND') ||
-          errorMessage.includes('ECONNREFUSED') ||
-          errorMessage.includes('timeout') ||
-          errorMessage.includes('Cannot connect to API');
+`;
 
-        // Write error message to stream if headers are sent
-        if (res.headersSent) {
-          res.write(
-            `\n\n[Error] Unable to connect to AI service. Please check your internet connection and try again.`,
-          );
-          res.end();
-          return;
-        } else {
+    // Convert messages to model format
+    const convertedMessages = await convertToModelMessages(messages);
+
+    let result;
+    try {
+      // Use streamText with maxSteps for automatic multi-step tool calling
+      result = await streamText({
+        model: metadata.model ? getChatModel(metadata.model) : getProChatModel(),
+        messages: convertedMessages,
+        tools: tools,
+        maxSteps: 10, // Allow up to 10 sequential tool calls
+        system: systemPrompt,
+        onStepFinish: ({ stepType, toolCalls, toolResults }) => {
+          if (stepType === 'tool-result') {
+            console.log(`[Step Complete] Tool calls: ${toolCalls?.length || 0}`);
+            toolCalls?.forEach((tc) => {
+              console.log(`  - ${tc.toolName}: ${JSON.stringify(tc.args).substring(0, 100)}...`);
+            });
+          }
+        },
+      });
+    } catch (streamError) {
+      console.error('Error calling streamText:', streamError);
+      const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown error';
+      const isNetworkError =
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('Cannot connect to API');
+
+      return res.status(500).json({
+        error: 'AI service error',
+        message: isNetworkError
+          ? 'Unable to connect to AI service. Please check your internet connection and try again.'
+          : errorMessage,
+      });
+    }
+
+    // Use pipeUIMessageStreamToResponse for proper streaming with tool call events
+    try {
+      result.pipeUIMessageStreamToResponse(res);
+    } catch (pipeError) {
+      console.error('Error during streaming:', pipeError);
+      if (!res.writableEnded) {
+        if (!res.headersSent) {
+          const errorMessage = pipeError instanceof Error ? pipeError.message : 'Unknown error';
           return res.status(500).json({
-            error: 'AI service error',
-            message: isNetworkError
-              ? 'Unable to connect to AI service. Please check your internet connection and try again.'
-              : errorMessage,
+            error: 'Streaming error',
+            message: errorMessage,
           });
-        }
-      }
-
-      // let assistantText = "";
-      let hasToolCalls = false;
-
-      // Stream the text and collect tool calls
-      try {
-        for await (const part of result.fullStream) {
-          if (part.type === 'text-delta') {
-            const chunk = part.text;
-            if (chunk && chunk.length > 0) {
-              // assistantText += chunk;
-              res.write(chunk);
-            }
-          } else if (part.type === 'tool-call') {
-            hasToolCalls = true;
-            console.log(`[Tool Call] ${part.toolName}`);
-          } else if (part.type === 'tool-result') {
-            console.log(`[Tool Result] ${part.toolName}`);
-          } else if (part.type === 'finish') {
-            console.log(`[Finish] Reason: ${part.finishReason}`);
-          }
-        }
-      } catch (streamLoopError) {
-        console.error(
-          `[Iteration ${iterationCount}] Error during streaming loop:`,
-          streamLoopError,
-        );
-        const errorMessage =
-          streamLoopError instanceof Error ? streamLoopError.message : 'Unknown error';
-        const isNetworkError =
-          errorMessage.includes('ENOTFOUND') ||
-          errorMessage.includes('ECONNREFUSED') ||
-          errorMessage.includes('timeout') ||
-          errorMessage.includes('Cannot connect to API');
-        if (!res.writableEnded) {
-          res.write(
-            `\n\n[Error] ${isNetworkError ? 'Unable to connect to AI service. Please check your internet connection and try again.' : errorMessage}`,
-          );
+        } else {
           res.end();
         }
-        continueLoop = false;
-      }
-
-      // After streaming completes, check if we need to continue
-      if (hasToolCalls) {
-        console.log(`[Iteration ${iterationCount}] Tool calls detected, getting response parts`);
-
-        try {
-          // Wait for the result to complete and get the raw response
-          const finalResponse = await result.response;
-
-          // Log what we got
-          console.log(`[Response Keys]:`, Object.keys(finalResponse));
-          console.log(`[Response Type]:`, typeof finalResponse);
-
-          // Try different possible locations for the messages
-          const responseMessages =
-            finalResponse.messages || (finalResponse as any).responseMessages || [];
-
-          console.log(`[Response Messages] Count: ${responseMessages.length}`);
-
-          if (responseMessages.length > 0) {
-            // Log first message structure
-            console.log(`[First Message]:`, JSON.stringify(responseMessages[0]).substring(0, 200));
-            conversationMessages.push(...responseMessages);
-            continueLoop = true;
-          } else {
-            console.log('[Warning] No response messages found, trying to extract from result');
-            // As a fallback, manually construct the continuation
-            continueLoop = false;
-          }
-        } catch (err) {
-          console.error('[Error] Getting response messages:', err);
-          continueLoop = false;
-        }
-      } else {
-        // No tool calls, we're done
-        console.log(`[Iteration ${iterationCount}] No tool calls, ending`);
-        continueLoop = false;
       }
     }
-
-    if (iterationCount >= maxIterations) {
-      console.log('[Warning] Max iterations reached');
-    }
-
-    res.end();
   } catch (error) {
     console.error('Chat error:', error);
 
@@ -577,7 +530,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
         },
       }),
       get_calendar_events: tool({
-        name: 'getCalendarEvents',
+        name: 'get_calendar_events',
         description: 'Get a list of Google Calendar events for a specific date range.',
         inputSchema: z.object({
           minTime: z.string().describe('The start date/time (ISO 8601 or YYYY-MM-DD).'),
@@ -589,7 +542,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
       }),
 
       set_calendar_event: tool({
-        name: 'setCalendarEvent',
+        name: 'set_calendar_event',
         description: 'Set a calendar event. All times must include a timezone.',
         inputSchema: z.object({
           summary: z.string().describe('The title or summary of the event.'),
@@ -611,9 +564,8 @@ export async function chatRequestWithID(req: Request, res: Response) {
         },
       }),
 
-      // --- ✅ Tasks Tools ---
       set_calendar_task: tool({
-        name: 'setCalendarTask',
+        name: 'set_calendar_task',
         description: 'Creates a new task in Google Tasks.',
         inputSchema: z.object({
           title: z.string().describe('The main title of the task.'),
@@ -634,7 +586,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
       }),
 
       list_calendar_tasks: tool({
-        name: 'listCalendarTasks',
+        name: 'list_calendar_tasks',
         description: 'List and filter tasks from Google Tasks.',
         inputSchema: z.object({
           category: z
@@ -654,9 +606,8 @@ export async function chatRequestWithID(req: Request, res: Response) {
         },
       }),
 
-      // --- 📧 Email Tools ---
       get_emails: tool({
-        name: 'getEmails',
+        name: 'get_emails',
         description: 'List emails with metadata (Subject, Sender, Date). Optimized for lists.',
         inputSchema: z.object({
           filter: z
@@ -675,7 +626,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
       }),
 
       get_email_details: tool({
-        name: 'getEmailDetails',
+        name: 'get_email_details',
         description: 'Get the full body content of a specific email using its ID.',
         inputSchema: z.object({
           messageId: z.string().describe('The unique ID of the email to fetch.'),
@@ -686,7 +637,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
       }),
 
       send_email: tool({
-        name: 'sendEmail',
+        name: 'send_email',
         description: 'Send a new email to a recipient.',
         inputSchema: z.object({
           to: z.string().email().describe("Recipient's email address."),
@@ -699,25 +650,9 @@ export async function chatRequestWithID(req: Request, res: Response) {
       }),
     };
 
-    const now = new Date().toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      dateStyle: 'full',
-      timeStyle: 'medium',
-    });
-    // const modelMessages = convertUIToModelMessages(messages);
-    // console.log("Converted messages:", JSON.stringify(modelMessages, null, 2));
-
     const convertToModel = await convertToModelMessages(messages);
-    // console.log(`converted msg: ${JSON.stringify(convertToModel)} `)
 
-    let result;
-    try {
-      result = await streamText({
-        model: metadata.model ? getChatModel(metadata.model) : getDefaultChatModel(),
-        messages: convertToModel,
-        tools: tools,
-        maxSteps: 5,
-        system: ` You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
+    const systemPrompt = `You are a helpful AI assistant with access to the user's personal memories and their Google Workspace (Calendar, Tasks, Gmail).
 
 [Current Date & Time]: ${new Date().toISOString()}
 [userId]: ${userId}
@@ -729,6 +664,7 @@ export async function chatRequestWithID(req: Request, res: Response) {
 
 **TOOL USAGE GUIDELINES:**
 
+* **Multi-Step Operations:** You can use multiple tools in sequence to accomplish complex tasks. For example, first search memories, then create a calendar event based on what you found.
 * **Calendar & Tasks:**
     * When creating events or tasks, infer the current year/date from [Current Date & Time] if not specified.
     * If a user asks to "List my tasks", check if they specified a category (e.g., "Work"). If not, check all lists or ask for clarification if needed.
@@ -743,7 +679,24 @@ export async function chatRequestWithID(req: Request, res: Response) {
     * *Good:* "I've successfully scheduled the 'Meeting' for you."
 * **Memories:** If \`search_memories\` returns data, weave it into your answer naturally (e.g., "Based on your memory of liking football..."). If empty, state you couldn't find that specific info.
 * **Errors:** If a tool fails (e.g., "Permission denied"), explain it clearly to the user and suggest re-linking their account if necessary.
-`,
+`;
+
+    let result;
+    try {
+      result = await streamText({
+        model: metadata.model ? getChatModel(metadata.model) : getDefaultChatModel(),
+        messages: convertToModel,
+        tools: tools,
+        maxSteps: 10,
+        system: systemPrompt,
+        onStepFinish: ({ stepType, toolCalls, toolResults }) => {
+          if (stepType === 'tool-result') {
+            console.log(`[Step Complete] Tool calls: ${toolCalls?.length || 0}`);
+            toolCalls?.forEach((tc) => {
+              console.log(`  - ${tc.toolName}: ${JSON.stringify(tc.args).substring(0, 100)}...`);
+            });
+          }
+        },
       });
     } catch (streamError) {
       console.error('Error calling streamText:', streamError);

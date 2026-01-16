@@ -10,7 +10,7 @@ import {
 } from '@ui/components/select';
 import { DefaultChatTransport } from 'ai';
 import { ArrowUp, Copy, RotateCcw, Sparkles, MessageSquare } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Streamdown } from 'streamdown';
@@ -19,7 +19,6 @@ import { useProject } from '@/stores';
 import { usePersistentChat } from '@/stores/chat';
 import { useGraphHighlights } from '@/stores/highlights';
 import { Spinner } from '../../spinner';
-import { nanoid } from 'nanoid';
 import { useAuth } from '@/context/AuthContext';
 
 // Import tool card components
@@ -34,7 +33,11 @@ import {
   SearchMemoriesCard,
   AddMemoryCard,
   FetchMemoryCard,
+  ToolCallGroup,
+  MultiStepProgress,
+  invocationStateToToolState,
   type ToolState,
+  type ToolInvocation,
 } from './tool-cards';
 
 // Custom hook for sticky auto scroll behavior
@@ -143,7 +146,127 @@ function ThinkingIndicator() {
   );
 }
 
-// Tool part renderer component - maps tool types to their card components
+// Tool part renderer component - maps tool invocations to their card components
+function ToolInvocationRenderer({
+  invocation,
+  messageId,
+  index,
+}: {
+  invocation: ToolInvocation;
+  messageId: string;
+  index: number;
+}) {
+  const state = invocationStateToToolState(invocation);
+  const key = `${messageId}-${invocation.toolName}-${index}`;
+  const toolName = invocation.toolName;
+
+  // Handle different tool types
+  switch (toolName) {
+    // Memory Tools
+    case 'search_memories':
+      return <SearchMemoriesCard key={key} state={state} output={invocation.result as any} />;
+
+    case 'add_memory':
+      return (
+        <AddMemoryCard
+          key={key}
+          state={state}
+          input={invocation.args as any}
+          output={invocation.result}
+        />
+      );
+
+    case 'fetch_memory':
+      return <FetchMemoryCard key={key} state={state} output={invocation.result as any} />;
+
+    // Email Tools
+    case 'get_emails':
+      return <GetEmailsCard key={key} state={state} output={invocation.result as any} />;
+
+    case 'get_email_details':
+      return <GetEmailDetailsCard key={key} state={state} output={invocation.result as any} />;
+
+    case 'send_email':
+      return (
+        <SendEmailCard
+          key={key}
+          state={state}
+          input={invocation.args as any}
+          output={invocation.result as any}
+        />
+      );
+
+    // Calendar Tools
+    case 'set_calendar_event':
+      return (
+        <SetCalendarEventCard
+          key={key}
+          state={state}
+          input={invocation.args as any}
+          output={invocation.result as any}
+        />
+      );
+
+    case 'get_calendar_events':
+      return <GetCalendarEventsCard key={key} state={state} output={invocation.result as any} />;
+
+    // Task Tools
+    case 'set_calendar_task':
+      return (
+        <SetCalendarTaskCard
+          key={key}
+          state={state}
+          input={invocation.args as any}
+          output={invocation.result as any}
+        />
+      );
+
+    case 'list_calendar_tasks':
+      return <ListCalendarTasksCard key={key} state={state} output={invocation.result as any} />;
+
+    default:
+      // For unknown tools, show a generic loading/success state
+      const displayName = toolName.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+
+      if (state === 'input-available' || state === 'input-streaming') {
+        return (
+          <div
+            key={key}
+            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-gray-50 animate-in fade-in duration-300"
+          >
+            <Spinner className="size-4 text-gray-600" />
+            <span className="text-sm text-gray-700">Processing {displayName}...</span>
+          </div>
+        );
+      }
+
+      if (state === 'output-error') {
+        return (
+          <div
+            key={key}
+            className="flex items-center gap-3 p-3 rounded-lg border border-red-200 bg-red-50 animate-in fade-in duration-300"
+          >
+            <span className="text-sm text-red-700">Error with {displayName}</span>
+          </div>
+        );
+      }
+
+      if (state === 'output-available') {
+        return (
+          <div
+            key={key}
+            className="flex items-center gap-3 p-3 rounded-lg border border-green-200 bg-green-50 animate-in fade-in duration-300"
+          >
+            <span className="text-sm text-green-700">{displayName} completed</span>
+          </div>
+        );
+      }
+
+      return null;
+  }
+}
+
+// Legacy tool part renderer for backward compatibility with old message format
 function ToolPartRenderer({
   part,
   messageId,
@@ -249,6 +372,183 @@ function ToolPartRenderer({
 
       return null;
   }
+}
+
+// Helper function to group tool invocations into steps
+function groupToolInvocationsIntoSteps(
+  toolInvocations: ToolInvocation[],
+): { stepNumber: number; invocations: ToolInvocation[] }[] {
+  // For now, treat each tool call as its own step (sequential)
+  // In the future, we could detect parallel calls and group them
+  return toolInvocations.map((inv, idx) => ({
+    stepNumber: idx + 1,
+    invocations: [inv],
+  }));
+}
+
+// Message renderer component - handles both old and new message formats
+function MessageRenderer({
+  message,
+  onCopy,
+  onRegenerate,
+}: {
+  message: any;
+  onCopy: () => void;
+  onRegenerate: () => void;
+}) {
+  // Extract tool invocations if present (new AI SDK format)
+  const toolInvocations: ToolInvocation[] = useMemo(() => {
+    // Check for toolInvocations on the message (new format)
+    if (message.toolInvocations && Array.isArray(message.toolInvocations)) {
+      return message.toolInvocations.map((inv: any) => ({
+        toolCallId: inv.toolCallId || inv.id,
+        toolName: inv.toolName,
+        args: inv.args || {},
+        state: inv.state || (inv.result !== undefined ? 'result' : 'call'),
+        result: inv.result,
+        error: inv.error,
+      }));
+    }
+    return [];
+  }, [message.toolInvocations]);
+
+  // Check if we have tool invocations in the new format
+  const hasToolInvocations = toolInvocations.length > 0;
+
+  // Group tool invocations into steps
+  const toolSteps = useMemo(
+    () => groupToolInvocationsIntoSteps(toolInvocations),
+    [toolInvocations],
+  );
+
+  // Get text parts from the message
+  const textParts = useMemo(() => {
+    if (!message.parts) return [];
+    return message.parts.filter((p: any) => p.type === 'text');
+  }, [message.parts]);
+
+  // Get legacy tool parts (old format with tool- prefix types)
+  const legacyToolParts = useMemo(() => {
+    if (!message.parts) return [];
+    return message.parts.filter(
+      (p: any) => typeof p.type === 'string' && p.type.startsWith('tool-'),
+    );
+  }, [message.parts]);
+
+  // Decide which format to use
+  const useLegacyFormat = legacyToolParts.length > 0 && !hasToolInvocations;
+
+  return (
+    <div
+      className={cn(
+        'flex animate-in fade-in slide-in-from-bottom-2 duration-300',
+        message.role === 'user' ? 'justify-end' : 'justify-start',
+      )}
+    >
+      <div
+        className={cn(
+          'flex flex-col gap-3 max-w-[85%]',
+          message.role === 'user' ? 'items-end' : 'items-start',
+        )}
+      >
+        {/* Render tool invocations first (if using new format) */}
+        {hasToolInvocations && (
+          <div className="w-full space-y-3">
+            {/* Multi-step progress indicator */}
+            {toolSteps.length > 1 && (
+              <MultiStepProgress currentStep={toolSteps.length} totalSteps={toolSteps.length} />
+            )}
+
+            {/* Tool call groups */}
+            {toolSteps.map((step, stepIdx) => (
+              <ToolCallGroup
+                key={`step-${step.stepNumber}`}
+                stepNumber={step.stepNumber}
+                totalSteps={toolSteps.length > 1 ? toolSteps.length : undefined}
+                toolInvocations={step.invocations}
+                isActive={stepIdx === toolSteps.length - 1}
+              >
+                {step.invocations.map((inv, invIdx) => (
+                  <ToolInvocationRenderer
+                    key={inv.toolCallId || `${message.id}-tool-${invIdx}`}
+                    invocation={inv}
+                    messageId={message.id}
+                    index={invIdx}
+                  />
+                ))}
+              </ToolCallGroup>
+            ))}
+          </div>
+        )}
+
+        {/* Render legacy tool parts (old format) */}
+        {useLegacyFormat &&
+          legacyToolParts.map((part: any, index: number) => (
+            <ToolPartRenderer
+              key={`${message.id}-${part.type}-${index}`}
+              part={part}
+              messageId={message.id}
+              index={index}
+            />
+          ))}
+
+        {/* Render text parts */}
+        {textParts.map((part: any, index: number) => (
+          <div
+            key={`${message.id}-text-${index}`}
+            className={cn(
+              'rounded-2xl shadow-sm',
+              message.role === 'user'
+                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-4 py-3'
+                : 'bg-white border border-gray-200 px-4 py-3',
+            )}
+          >
+            <Streamdown className={cn(message.role === 'user' ? 'text-white' : 'text-gray-900')}>
+              {part.text}
+            </Streamdown>
+          </div>
+        ))}
+
+        {/* Also render content if it's a plain string (fallback) */}
+        {typeof message.content === 'string' && message.content && textParts.length === 0 && (
+          <div
+            className={cn(
+              'rounded-2xl shadow-sm',
+              message.role === 'user'
+                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-4 py-3'
+                : 'bg-white border border-gray-200 px-4 py-3',
+            )}
+          >
+            <Streamdown className={cn(message.role === 'user' ? 'text-white' : 'text-gray-900')}>
+              {message.content}
+            </Streamdown>
+          </div>
+        )}
+
+        {/* Action buttons for assistant messages */}
+        {message.role === 'assistant' && (textParts.length > 0 || message.content) && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+            <Button
+              className="h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              onClick={onCopy}
+              size="icon"
+              variant="ghost"
+            >
+              <Copy className="size-3.5" />
+            </Button>
+            <Button
+              className="h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              onClick={onRegenerate}
+              size="icon"
+              variant="ghost"
+            >
+              <RotateCcw className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function ChatMessages() {
@@ -408,192 +708,8 @@ export function ChatMessages() {
     },
   });
 
-  // Automatically submit tool results back to the backend when available
-  const processedToolCallsRef = useRef<Set<string>>(new Set());
-  const isSubmittingToolRef = useRef<boolean>(false);
-
-  useEffect(() => {
-    // Find the most recent assistant message containing a tool with output-available
-    const assistant = [...messages].reverse().find((m) => m.role === 'assistant');
-    if (!assistant) return;
-    const toolPart = [...(assistant.parts as any[])]
-      .reverse()
-      .find(
-        (p) =>
-          typeof p?.type === 'string' &&
-          p.type.startsWith('tool-') &&
-          p?.state === 'output-available',
-      ) as any | undefined;
-    if (!toolPart) return;
-
-    const toolCallId: string | undefined = toolPart.toolCallId || toolPart.id;
-    if (!toolCallId) return;
-    if (processedToolCallsRef.current.has(toolCallId)) return;
-    if (isSubmittingToolRef.current) return;
-
-    const activeId = activeChatIdRef.current;
-    if (!activeId) return;
-
-    // Submit the tool result to progress the conversation
-    const submit = async () => {
-      try {
-        isSubmittingToolRef.current = true;
-        processedToolCallsRef.current.add(toolCallId);
-
-        const url = `${import.meta.env.VITE_PUBLIC_BACKEND_URL}/chat/${activeId}`;
-
-        const payload = {
-          id: activeId,
-          messages,
-          trigger: 'submit-tool-result',
-          metadata: {
-            projectId: selectedProject ?? 'sm_project_default',
-            model: selectedModel,
-          },
-        };
-
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        headers.set('Accept', 'text/event-stream');
-
-        const controller = new AbortController();
-        const signal = controller.signal;
-
-        // Create a new streaming assistant message to render the final answer
-        const streamingId = `assistant-${nanoid(8)}`;
-        setMessages((prev: any[]) => [
-          ...prev,
-          {
-            id: streamingId,
-            role: 'assistant',
-            parts: [],
-          },
-        ]);
-
-        const res = await fetch(url, {
-          method: 'POST',
-          headers,
-          credentials: 'include',
-          body: JSON.stringify(payload),
-          signal,
-        });
-
-        if (!res.ok || !res.body) {
-          throw new Error(`Tool follow-up failed: ${res.status}`);
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let textStarted = false;
-
-        const flushEvents = (chunk: string) => {
-          buffer += chunk;
-          let idx: number;
-          while ((idx = buffer.indexOf('\n\n')) !== -1) {
-            const raw = buffer.slice(0, idx).trim();
-            buffer = buffer.slice(idx + 2);
-            if (!raw) continue;
-            const lines = raw.split('\n');
-            for (const line of lines) {
-              const prefix = 'data: ';
-              if (!line.startsWith(prefix)) continue;
-              const data = line.slice(prefix.length).trim();
-              if (data === '[DONE]') {
-                return { done: true } as const;
-              }
-              try {
-                const evt = JSON.parse(data);
-                // Handle the minimal set of events we care about
-                switch (evt?.type) {
-                  case 'text-start': {
-                    textStarted = true;
-                    // initialize a text part
-                    setMessages((prev: any[]) =>
-                      prev.map((m) =>
-                        m.id === streamingId
-                          ? {
-                              ...m,
-                              parts: [...m.parts, { type: 'text', id: evt.id ?? '0', text: '' }],
-                            }
-                          : m,
-                      ),
-                    );
-                    break;
-                  }
-                  case 'text-delta': {
-                    const delta = evt?.delta ?? '';
-                    if (!delta) break;
-                    setMessages((prev: any[]) =>
-                      prev.map((m) => {
-                        if (m.id !== streamingId) return m;
-                        const parts = [...m.parts];
-                        if (parts.length === 0) {
-                          parts.push({ type: 'text', id: evt.id ?? '0', text: String(delta) });
-                        } else {
-                          const last = parts[parts.length - 1];
-                          if (last.type === 'text') {
-                            last.text = (last.text ?? '') + String(delta);
-                          } else {
-                            parts.push({ type: 'text', id: evt.id ?? '0', text: String(delta) });
-                          }
-                        }
-                        return { ...m, parts };
-                      }),
-                    );
-                    break;
-                  }
-                  case 'text-end': {
-                    // nothing special; the text is already accumulated
-                    break;
-                  }
-                  case 'finish': {
-                    return { done: true } as const;
-                  }
-                  default:
-                    break;
-                }
-              } catch (e) {
-                // ignore malformed events
-              }
-            }
-          }
-          return { done: false } as const;
-        };
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const str = decoder.decode(value, { stream: true });
-          const { done: finished } = flushEvents(str);
-          if (finished) break;
-        }
-
-        // finalize text part with state done
-        if (textStarted) {
-          setMessages((prev: any[]) =>
-            prev.map((m) =>
-              m.id === streamingId
-                ? {
-                    ...m,
-                    parts: m.parts.map((p: any) =>
-                      p?.type === 'text' && p?.state !== 'done' ? { ...p, state: 'done' } : p,
-                    ),
-                  }
-                : m,
-            ),
-          );
-        }
-      } catch (e) {
-        console.error('Failed to submit tool result:', e);
-      } finally {
-        isSubmittingToolRef.current = false;
-      }
-    };
-
-    // Fire and forget
-    submit();
-  }, [messages, selectedProject, selectedModel, setMessages]);
+  // Note: AI SDK with maxSteps handles multi-step tool calling automatically
+  // No manual tool result submission needed
 
   useEffect(() => {
     // Ensure store chat id matches the route param on mount/navigation
@@ -680,21 +796,46 @@ export function ChatMessages() {
     },
   });
 
-  // Update graph highlights from the most recent tool-searchMemories output
+  // Update graph highlights from the most recent search_memories tool output
   useEffect(() => {
     try {
-      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant') as any;
       if (!lastAssistant) return;
-      const lastSearchPart = [...(lastAssistant.parts as any[])]
-        .reverse()
-        .find((p) => p?.type === 'tool-searchMemories' && p?.state === 'output-available');
-      if (!lastSearchPart) return;
-      const output = (lastSearchPart as any).output;
-      const ids = Array.isArray(output?.results)
-        ? ((output.results as any[]).map((r) => r?.documentId).filter(Boolean) as string[])
-        : [];
-      if (ids.length > 0) {
-        setDocumentIds(ids);
+
+      let documentIds: string[] = [];
+
+      // Check new format (toolInvocations array)
+      if (lastAssistant.toolInvocations && Array.isArray(lastAssistant.toolInvocations)) {
+        const searchInvocation = [...lastAssistant.toolInvocations]
+          .reverse()
+          .find((inv: any) => inv.toolName === 'search_memories' && inv.state === 'result');
+        if (searchInvocation && searchInvocation.result) {
+          const results = searchInvocation.result.results;
+          if (Array.isArray(results)) {
+            documentIds = results.map((r: any) => r?.documentId).filter(Boolean);
+          }
+        }
+      }
+
+      // Fallback to legacy format (parts with tool- prefix)
+      if (documentIds.length === 0 && lastAssistant.parts) {
+        const lastSearchPart = [...(lastAssistant.parts as any[])]
+          .reverse()
+          .find(
+            (p) =>
+              (p?.type === 'tool-searchMemories' || p?.type === 'tool-search_memories') &&
+              p?.state === 'output-available',
+          );
+        if (lastSearchPart) {
+          const output = (lastSearchPart as any).output;
+          if (Array.isArray(output?.results)) {
+            documentIds = output.results.map((r: any) => r?.documentId).filter(Boolean);
+          }
+        }
+      }
+
+      if (documentIds.length > 0) {
+        setDocumentIds(documentIds);
       }
     } catch {}
   }, [messages]);
@@ -732,95 +873,20 @@ export function ChatMessages() {
           ref={scrollContainerRef}
         >
           {messages.map((message) => (
-            <div
-              className={cn(
-                'flex animate-in fade-in slide-in-from-bottom-2 duration-300',
-                message.role === 'user' ? 'justify-end' : 'justify-start',
-              )}
+            <MessageRenderer
               key={message.id}
-            >
-              <div
-                className={cn(
-                  'flex flex-col gap-3 max-w-[85%]',
-                  message.role === 'user' ? 'items-end' : 'items-start',
-                )}
-              >
-                {/* Render message parts */}
-                {message.parts
-                  .filter((part) => {
-                    if (part.type === 'text') return true;
-                    // Render any tool parts
-                    if (typeof part.type === 'string' && part.type.startsWith('tool-')) return true;
-                    return false;
-                  })
-                  .map((part, index) => {
-                    // Text part
-                    if (part.type === 'text') {
-                      return (
-                        <div
-                          key={`${message.id}-text-${index}`}
-                          className={cn(
-                            'rounded-2xl shadow-sm',
-                            message.role === 'user'
-                              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-4 py-3'
-                              : 'bg-white border border-gray-200 px-4 py-3',
-                          )}
-                        >
-                          <Streamdown
-                            className={cn(message.role === 'user' ? 'text-white' : 'text-gray-900')}
-                          >
-                            {part.text}
-                          </Streamdown>
-                        </div>
-                      );
-                    }
-
-                    // Tool parts - use the ToolPartRenderer
-                    if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-                      return (
-                        <ToolPartRenderer
-                          key={`${message.id}-${part.type}-${index}`}
-                          part={part}
-                          messageId={message.id}
-                          index={index}
-                        />
-                      );
-                    }
-
-                    return null;
-                  })}
-
-                {/* Action buttons for assistant messages */}
-                {message.role === 'assistant' && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
-                    <Button
-                      className="h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          message.parts
-                            .filter((p) => p.type === 'text')
-                            ?.map((p) => (p as any).text)
-                            .join('\n') ?? '',
-                        );
-                        toast.success('Copied to clipboard');
-                      }}
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <Copy className="size-3.5" />
-                    </Button>
-                    <Button
-                      className="h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                      onClick={() => regenerate({ messageId: message.id })}
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <RotateCcw className="size-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
+              message={message}
+              onCopy={() => {
+                navigator.clipboard.writeText(
+                  message.parts
+                    .filter((p) => p.type === 'text')
+                    ?.map((p) => (p as any).text)
+                    .join('\n') ?? '',
+                );
+                toast.success('Copied to clipboard');
+              }}
+              onRegenerate={() => regenerate({ messageId: message.id })}
+            />
           ))}
 
           {/* Thinking indicator */}
