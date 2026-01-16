@@ -1,13 +1,13 @@
-import prisma from '../db/prismaClient';
+import prisma from '../db/prismaClient.js';
 import {
   DocumentsWithMemoriesQuerySchema,
   DocumentWithMemoriesSchema,
   MemoryEntryAPISchema,
-} from '../validation/api';
+} from '../validation/api.js';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
-import { boss, JOB_PROCESS_DOCUMENT } from '../queue';
+import { boss, JOB_PROCESS_DOCUMENT } from '../queue.js';
 
 // --- Type Definitions for Clarity ---
 

@@ -1,15 +1,15 @@
 import type { Request, Response } from 'express';
-import { DocumentsWithMemoriesQuerySchema } from '../validation/api';
-import { getDocumentsWithMemories as getDocumentsService } from '../services/document.service';
+import { DocumentsWithMemoriesQuerySchema } from '../validation/api.js';
+import { getDocumentsWithMemories as getDocumentsService } from '../services/document.service.js';
 import {
   uploadDocumentFile as uploadDocumentService,
   updateDocumentMetadata as updateDocumentService,
-} from '../services/document.service';
+} from '../services/document.service.js';
 // import multer from "multer";
 import { z } from 'zod';
 import path from 'path';
 import fs from 'fs';
-import logger from '../utils/logger';
+import logger from '../utils/logger.js';
 
 export async function getDocumentsWithMemories(req: Request, res: Response) {
   // console.log("📥 Received request to /documents/documents");

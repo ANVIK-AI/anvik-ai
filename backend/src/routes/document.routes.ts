@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { uploadDocumentFile, updateDocumentMetadata,getDocumentsWithMemories } from "../controller/document.controller";
-import { isAuthenticated } from "../middleware/auth.middleware";
+import { uploadDocumentFile, updateDocumentMetadata,getDocumentsWithMemories } from "../controller/document.controller.js";
+import { isAuthenticated } from "../middleware/auth.middleware.js";
 const router = Router();
 
 router.post("/documents/documents", isAuthenticated, getDocumentsWithMemories);

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import prisma from '../db/prismaClient';
-import { embeddingModelName } from '../gemini';
-import logger from '../utils/logger';
+import prisma from '../db/prismaClient.js';
+import { embeddingModelName } from '../gemini.js';
+import logger from '../utils/logger.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const chatRequestSchema = z.object({
