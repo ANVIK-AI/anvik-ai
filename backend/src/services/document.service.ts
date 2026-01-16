@@ -48,9 +48,10 @@ function parseVectorString(vectorString: string | null | undefined): number[] | 
  * This service handles all database interaction and data transformation.
  *
  * @param input The validated query parameters.
+ * @param userSpaceIds The space IDs that belong to the authenticated user.
  * @returns An object containing the list of documents and pagination metadata.
  */
-export async function getDocumentsWithMemories(input: QueryInput) {
+export async function getDocumentsWithMemories(input: QueryInput, userSpaceIds: string[]) {
   // 1. Destructure the validated query input for use in the Prisma query.
   const { page, limit, sort, order, containerTags } = input;
 
@@ -59,21 +60,72 @@ export async function getDocumentsWithMemories(input: QueryInput) {
   const orderBy = { [sort]: order } as any;
 
   // 3. Dynamically construct the 'where' clause for filtering.
-  // This ensures the 'containerTags' filter is only applied if it's provided.
+  // Filter documents by the user's spaces through multiple possible relations.
   const whereClause: any = {};
-  if (containerTags && containerTags.length > 0) {
-    whereClause.memorySources = {
-      some: {
-        memoryEntry: {
-          space: {
-            containerTag: {
-              in: containerTags,
+
+  // Only show documents that belong to the user's spaces
+  // Documents can be linked to spaces via:
+  // 1. documentsToSpaces join table
+  // 2. memorySources -> memoryEntry -> space
+  if (userSpaceIds.length > 0) {
+    whereClause.OR = [
+      // Documents directly linked to user's spaces
+      {
+        documentsToSpaces: {
+          some: {
+            spaceId: {
+              in: userSpaceIds,
             },
           },
         },
       },
+      // Documents with memories in user's spaces
+      {
+        memorySources: {
+          some: {
+            memoryEntry: {
+              spaceId: {
+                in: userSpaceIds,
+              },
+            },
+          },
+        },
+      },
+    ];
+  } else {
+    // If user has no spaces, return empty result
+    console.log('⚠️ User has no spaceIds, returning empty documents');
+    return {
+      documents: [],
+      pagination: {
+        currentPage: page,
+        limit,
+        totalItems: 0,
+        totalPages: 0,
+      },
     };
   }
+
+  // Add containerTags filter if provided.
+  if (containerTags && containerTags.length > 0) {
+    whereClause.AND = [
+      {
+        memorySources: {
+          some: {
+            memoryEntry: {
+              space: {
+                containerTag: {
+                  in: containerTags,
+                },
+              },
+            },
+          },
+        },
+      },
+    ];
+  }
+
+  console.log('📊 Document query whereClause:', JSON.stringify(whereClause, null, 2));
 
   // 4. Execute queries in a transaction for efficiency and data consistency.
   // This fetches the total count and the paginated data in a single database round-trip.

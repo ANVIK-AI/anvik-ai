@@ -10,13 +10,40 @@ import { z } from 'zod';
 import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger.js';
+import prisma from '../db/prismaClient.js';
 
 export async function getDocumentsWithMemories(req: Request, res: Response) {
   // console.log("📥 Received request to /documents/documents");
   // console.log("Request body:", req.body);
 
-  // 1. Validate the request body against the Zod schema
-  const id=req.user.id;
+  // 1. Get the authenticated user
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({ message: 'User not found in session' });
+  }
+
+  // Get the user's spaceIds from the user record
+  let userSpaceIds: string[] = user.spaceIds || [];
+
+  // Also query for spaces where this user is the owner (using googleId as ownerId)
+  // This handles cases where spaceIds array might be incomplete
+  if (user.googleId) {
+    const ownedSpaces = await prisma.space.findMany({
+      where: { ownerId: user.googleId },
+      select: { id: true },
+    });
+    const ownedSpaceIds = ownedSpaces.map((s) => s.id);
+    // Merge with existing spaceIds (deduplicate)
+    userSpaceIds = [...new Set([...userSpaceIds, ...ownedSpaceIds])];
+  }
+
+  console.log('📊 User info for document fetch:', {
+    userId: user.id,
+    googleId: user.googleId,
+    email: user.email,
+    spaceIds: userSpaceIds,
+  });
+
   const validationResult = DocumentsWithMemoriesQuerySchema.safeParse(req.body);
 
   if (!validationResult.success) {
@@ -29,8 +56,8 @@ export async function getDocumentsWithMemories(req: Request, res: Response) {
 
   try {
     // console.log("✅ Request validated, calling service...");
-    // 2. Pass the validated data to the service
-    const data = await getDocumentsService(validationResult.data);
+    // 2. Pass the validated data and user's spaceIds to the service
+    const data = await getDocumentsService(validationResult.data, userSpaceIds);
     // console.log("✅ Service returned data:", {
     //     documentsCount: data.documents.length,
     //     pagination: data.pagination

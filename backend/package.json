@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:studio": "prisma studio --port 5555 --url \"postgresql://postgres:Yash_5507@ai-certs-db.cj4oi6208x9q.ap-south-1.rds.amazonaws.com:5432/appdb?schema=public&sslmode=require\"",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=2048 node ./node_modules/typescript/lib/tsc.js --noEmit",

@@ -1,0 +1,12 @@
+import { config } from 'dotenv';
+
+// Load environment variables
+config();
+
+export default {
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+};
